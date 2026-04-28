@@ -8,10 +8,11 @@ class AulaService {
 
   final SupabaseClient _client;
 
-  Future<List<Aula>> listarAulas() async {
+  Future<List<Aula>> listarAulas({required String turmaId}) async {
     final rows = await _client
         .from('aulas')
         .select()
+        .eq('turma_id', turmaId)
         .order('dia_semana')
         .order('horario_inicio');
 
@@ -46,6 +47,22 @@ class AulaService {
 
   Future<void> excluirAula(String id) async {
     await _client.from('aulas').delete().eq('id', id);
+  }
+
+  Future<Aula> atualizarSala({required Aula aula, required String sala}) async {
+    final id = aula.id;
+    if (id == null) {
+      throw ArgumentError('Nao e possivel atualizar uma aula sem id.');
+    }
+
+    final row = await _client
+        .from('aulas')
+        .update(<String, dynamic>{'sala': sala.trim()})
+        .eq('id', id)
+        .select()
+        .single();
+
+    return Aula.fromMap(row);
   }
 }
 

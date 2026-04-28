@@ -7,6 +7,7 @@ void main() {
     final aulas = <Aula>[
       const Aula(
         id: '1',
+        turmaId: 'eletronica_3a',
         disciplina: 'Calculo',
         professor: 'Ana',
         sala: 'A101',
@@ -15,6 +16,7 @@ void main() {
       ),
       const Aula(
         id: '2',
+        turmaId: 'eletronica_3a',
         disciplina: 'Fisica',
         professor: 'Bruno',
         sala: 'B204',
@@ -23,6 +25,7 @@ void main() {
       ),
       const Aula(
         id: '3',
+        turmaId: 'eletronica_3a',
         disciplina: 'Historia',
         professor: 'Carla',
         sala: 'C12',
@@ -39,6 +42,7 @@ void main() {
   test('Aula converte horario do banco para exibicao', () {
     final aula = Aula.fromMap(<String, dynamic>{
       'id': '6fb90fa9-0c6c-48db-b804-22b4c86ad641',
+      'turma_id': 'eletronica_3a',
       'disciplina': 'Algoritmos',
       'professor': 'Dra. Lima',
       'sala': 'Lab 2',

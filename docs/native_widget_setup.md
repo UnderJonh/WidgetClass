@@ -25,7 +25,7 @@ E precisa registrar o receiver do widget:
 <receiver
     android:name=".ClassScheduleWidgetProvider"
     android:exported="true"
-    android:label="Widget Class">
+    android:label="WidgetClass">
     <intent-filter>
         <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
     </intent-filter>
@@ -70,3 +70,18 @@ let disciplina = defaults?.string(forKey: "current_disciplina") ?? "Sem aula"
 let professor = defaults?.string(forKey: "current_professor") ?? "Professor"
 let sala = defaults?.string(forKey: "current_sala") ?? "Sala"
 ```
+
+## Login administrativo por email
+
+O app nao tem tela de cadastro. Crie os usuarios manualmente no Supabase em
+**Authentication > Users** usando email e senha.
+
+Para liberar permissao de administrador ou staff, rode no SQL Editor:
+
+```sql
+insert into public.usuarios_roles (email, role, nome)
+values ('seu.email@gmail.com', 'admin', 'Seu Nome')
+on conflict (email) do update set role = excluded.role, nome = excluded.nome;
+```
+
+Use `role = 'staff'` para usuarios que podem alterar somente a sala.
