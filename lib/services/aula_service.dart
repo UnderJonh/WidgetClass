@@ -2,6 +2,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/aula.dart';
 
+const Duration defaultTempoVisivelDepoisDoInicio = Duration(minutes: 30);
+
 class AulaService {
   AulaService({SupabaseClient? client})
     : _client = client ?? Supabase.instance.client;
@@ -66,7 +68,11 @@ class AulaService {
   }
 }
 
-Aula? proximaAulaDoDia(List<Aula> aulas, {DateTime? agora}) {
+Aula? proximaAulaDoDia(
+  List<Aula> aulas, {
+  DateTime? agora,
+  Duration tempoVisivelDepoisDoInicio = defaultTempoVisivelDepoisDoInicio,
+}) {
   final referencia = agora ?? DateTime.now();
   final horarioAtual = Duration(
     hours: referencia.hour,
@@ -74,15 +80,24 @@ Aula? proximaAulaDoDia(List<Aula> aulas, {DateTime? agora}) {
     seconds: referencia.second,
   );
 
-  final aulasRestantes =
-      aulas
-          .where(
-            (aula) =>
-                aula.diaSemana == referencia.weekday &&
-                aula.horarioInicio >= horarioAtual,
-          )
-          .toList()
+  final aulasDeHoje =
+      aulas.where((aula) => aula.diaSemana == referencia.weekday).toList()
         ..sort((a, b) => a.horarioInicio.compareTo(b.horarioInicio));
 
-  return aulasRestantes.isEmpty ? null : aulasRestantes.first;
+  final aulasEmExibicao = aulasDeHoje.where((aula) {
+    final fimDaJanela = aula.horarioInicio + tempoVisivelDepoisDoInicio;
+    return aula.horarioInicio <= horarioAtual && horarioAtual <= fimDaJanela;
+  }).toList();
+
+  if (aulasEmExibicao.isNotEmpty) {
+    return aulasEmExibicao.last;
+  }
+
+  for (final aula in aulasDeHoje) {
+    if (aula.horarioInicio >= horarioAtual) {
+      return aula;
+    }
+  }
+
+  return null;
 }

@@ -3,60 +3,332 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'app_config.dart';
+import 'models/atividade.dart';
 import 'models/aula.dart';
 import 'models/turma.dart';
+import 'services/atividade_service.dart';
 import 'services/aula_service.dart';
 import 'services/local_settings_service.dart';
+import 'services/notification_service.dart';
 import 'services/session_service.dart';
 import 'services/widget_sync_service.dart';
-
-const supabaseUrl = 'https://ssvuyaolsawcyordeyzw.supabase.co';
-const supabasePublishableKey = 'sb_publishable_AI0L1R5fzKVxqWQ8LFIq4w_q2tGn7E_';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Supabase.initialize(url: supabaseUrl, anonKey: supabasePublishableKey);
   await WidgetSyncService.initialize();
+  await NotificationService.instance.initialize();
 
   runApp(const WidgetClassApp());
 }
 
-class WidgetClassApp extends StatelessWidget {
+class WidgetClassApp extends StatefulWidget {
   const WidgetClassApp({super.key});
+
+  @override
+  State<WidgetClassApp> createState() => _WidgetClassAppState();
+}
+
+class _WidgetClassAppState extends State<WidgetClassApp> {
+  final LocalSettingsService _settingsService = LocalSettingsService();
+  ThemeMode _themeMode = ThemeMode.system;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThemeMode();
+  }
+
+  Future<void> _loadThemeMode() async {
+    final mode = await _settingsService.getThemeMode();
+    if (!mounted) return;
+    setState(() => _themeMode = mode);
+  }
+
+  Future<void> _handleThemeModeChange(ThemeMode mode) async {
+    if (_themeMode == mode) return;
+    setState(() => _themeMode = mode);
+    await _settingsService.setThemeMode(mode);
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'WidgetClass',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1B9AAA),
-          brightness: Brightness.light,
-        ),
-        scaffoldBackgroundColor: const Color(0xFFF2F5F8),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.white.withValues(alpha: 0.72),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(18),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(18),
-            borderSide: const BorderSide(color: Color(0xFF1B9AAA), width: 1.4),
-          ),
+      themeMode: _themeMode,
+      theme: _buildAppTheme(Brightness.light),
+      darkTheme: _buildAppTheme(Brightness.dark),
+      home: SplashGate(
+        child: ScheduleHomePage(
+          themeMode: _themeMode,
+          onThemeModeChanged: _handleThemeModeChange,
         ),
       ),
-      home: const ScheduleHomePage(),
+    );
+  }
+}
+
+class SplashGate extends StatefulWidget {
+  const SplashGate({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  State<SplashGate> createState() => _SplashGateState();
+}
+
+class _SplashGateState extends State<SplashGate>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scale;
+  late final Animation<double> _fade;
+  late final Animation<Offset> _slide;
+  bool _visible = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 980),
+    )..forward();
+    _scale = CurvedAnimation(parent: _controller, curve: Curves.easeOutBack);
+    _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOutQuart);
+    _slide = Tween<Offset>(
+      begin: const Offset(0, 0.08),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    Future<void>.delayed(const Duration(milliseconds: 1450), () {
+      if (mounted) setState(() => _visible = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Stack(
+      children: <Widget>[
+        widget.child,
+        IgnorePointer(
+          ignoring: !_visible,
+          child: AnimatedOpacity(
+            opacity: _visible ? 1 : 0,
+            duration: const Duration(milliseconds: 360),
+            curve: Curves.easeOutCubic,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDark
+                      ? const <Color>[
+                          Color(0xFF07141D),
+                          Color(0xFF101D2A),
+                          Color(0xFF1A172B),
+                        ]
+                      : const <Color>[
+                          Color(0xFFEAF8F8),
+                          Color(0xFFF8FAFC),
+                          Color(0xFFEFF4FF),
+                        ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Center(
+                child: FadeTransition(
+                  opacity: _fade,
+                  child: SlideTransition(
+                    position: _slide,
+                    child: ScaleTransition(
+                      scale: _scale,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Text(
+                            'WidgetClass',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.displaySmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.2,
+                                ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Sua rotina no ponto',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '(1.4v)',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+ThemeData _buildAppTheme(Brightness brightness) {
+  final scheme = ColorScheme.fromSeed(
+    seedColor: const Color(0xFF1B9AAA),
+    brightness: brightness,
+  );
+  final isDark = brightness == Brightness.dark;
+  return ThemeData(
+    useMaterial3: true,
+    brightness: brightness,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: isDark
+        ? const Color(0xFF0B1320)
+        : const Color(0xFFF2F5F8),
+    appBarTheme: AppBarTheme(
+      backgroundColor: Colors.transparent,
+      foregroundColor: scheme.onSurface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: isDark
+          ? const Color(0xFF0F1D2B).withValues(alpha: 0.92)
+          : Colors.white.withValues(alpha: 0.88),
+      indicatorColor: scheme.primary.withValues(alpha: isDark ? 0.34 : 0.20),
+      labelTextStyle: WidgetStateProperty.resolveWith<TextStyle?>((states) {
+        final active = states.contains(WidgetState.selected);
+        return TextStyle(
+          fontWeight: active ? FontWeight.w800 : FontWeight.w700,
+          color: active ? scheme.onSurface : scheme.onSurfaceVariant,
+        );
+      }),
+    ),
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: scheme.primary,
+      foregroundColor: scheme.onPrimary,
+      extendedTextStyle: const TextStyle(fontWeight: FontWeight.w800),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: isDark
+          ? Colors.white.withValues(alpha: 0.10)
+          : Colors.white.withValues(alpha: 0.72),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.10)
+              : Colors.white.withValues(alpha: 0.60),
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(color: scheme.primary, width: 1.4),
+      ),
+    ),
+  );
+}
+
+class WidgetClassLogoMark extends StatelessWidget {
+  const WidgetClassLogoMark({this.size = 46, super.key});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final gap = size * 0.09;
+    final padding = size * 0.14;
+    final tile = (size - padding * 2 - gap) / 2;
+    return Container(
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(padding),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111827),
+        borderRadius: BorderRadius.circular(size * 0.24),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: const Color(0xFF1B9AAA).withValues(alpha: 0.24),
+            blurRadius: size * 0.28,
+            offset: Offset(0, size * 0.10),
+          ),
+        ],
+      ),
+      child: Wrap(
+        spacing: gap,
+        runSpacing: gap,
+        children: <Widget>[
+          _LogoTile(size: tile, color: const Color(0xFF1B9AAA)),
+          _LogoTile(size: tile, color: const Color(0xFF5B7CFA)),
+          _LogoTile(size: tile, color: const Color(0xFFFFB703)),
+          _LogoTile(size: tile, color: const Color(0xFF00B894)),
+        ],
+      ),
+    );
+  }
+}
+
+class _LogoTile extends StatelessWidget {
+  const _LogoTile({required this.size, required this.color});
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 280),
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(size * 0.28),
+      ),
     );
   }
 }
 
 class ScheduleHomePage extends StatefulWidget {
-  const ScheduleHomePage({super.key});
+  const ScheduleHomePage({
+    required this.themeMode,
+    required this.onThemeModeChanged,
+    super.key,
+  });
+
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeModeChanged;
 
   @override
   State<ScheduleHomePage> createState() => _ScheduleHomePageState();
@@ -64,8 +336,10 @@ class ScheduleHomePage extends StatefulWidget {
 
 class _ScheduleHomePageState extends State<ScheduleHomePage> {
   final AulaService _aulaService = AulaService();
+  final AtividadeService _atividadeService = AtividadeService();
   final LocalSettingsService _settingsService = LocalSettingsService();
   final SessionService _sessionService = SessionService();
+  final NotificationService _notificationService = NotificationService.instance;
 
   late StreamSubscription<AuthState> _authSubscription;
 
@@ -73,7 +347,9 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
   AppRole _role = AppRole.aluno;
   User? _user;
   List<Aula> _aulas = <Aula>[];
+  List<Atividade> _atividades = <Atividade>[];
   Aula? _proximaAula;
+  int _selectedTab = 0;
   bool _carregando = true;
   bool _salvando = false;
   String? _erro;
@@ -95,8 +371,12 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
 
   Future<void> _bootstrap() async {
     final turmaId = await _settingsService.getTurmaId();
+    await _notificationService.requestPermissionsIfNeeded();
     if (!mounted) return;
     setState(() => _turmaSelecionada = turmaById(turmaId));
+    await WidgetSyncService.salvarConfiguracaoWidget(
+      turmaId: _turmaSelecionada.id,
+    );
     await _atualizarSessao();
     await _carregarAulas();
   }
@@ -117,15 +397,29 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
     });
 
     try {
-      final aulas = await _aulaService.listarAulas(
+      await WidgetSyncService.salvarConfiguracaoWidget(
         turmaId: _turmaSelecionada.id,
       );
+      final results = await Future.wait<Object>(<Future<Object>>[
+        _aulaService.listarAulas(turmaId: _turmaSelecionada.id),
+        _atividadeService.listarAtividades(turmaId: _turmaSelecionada.id),
+      ]);
+      final aulas = results[0] as List<Aula>;
+      final atividades = results[1] as List<Atividade>;
       final proxima = proximaAulaDoDia(aulas);
-      await WidgetSyncService.sincronizarProximaAula(proxima);
+      await WidgetSyncService.sincronizar(
+        proximaAula: proxima,
+        atividades: atividades,
+      );
+      await _notificationService.syncEvaluationReminders(
+        turmaId: _turmaSelecionada.id,
+        atividades: atividades,
+      );
 
       if (!mounted) return;
       setState(() {
         _aulas = aulas;
+        _atividades = atividades;
         _proximaAula = proxima;
       });
     } catch (error) {
@@ -148,6 +442,7 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
 
     if (turma == null) return;
     await _settingsService.setTurmaId(turma.id);
+    await WidgetSyncService.salvarConfiguracaoWidget(turmaId: turma.id);
     if (!mounted) return;
     setState(() => _turmaSelecionada = turma);
     await _carregarAulas();
@@ -185,7 +480,7 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
     await _atualizarSessao();
   }
 
-  Future<void> _salvarAula({Aula? aula}) async {
+  Future<void> _salvarAula({Aula? aula, int? diaSemanaInicial}) async {
     if (!_role.canManageClasses) {
       _mostrarMensagem('Somente administradores podem editar o card completo.');
       return;
@@ -196,8 +491,11 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (context) =>
-          AulaFormSheet(aula: aula, turmaInicial: _turmaSelecionada),
+      builder: (context) => AulaFormSheet(
+        aula: aula,
+        turmaInicial: _turmaSelecionada,
+        diaSemanaInicial: diaSemanaInicial,
+      ),
     );
 
     if (resultado == null) return;
@@ -213,6 +511,95 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
       _mostrarMensagem('Aula salva.');
     } catch (error) {
       _mostrarMensagem('Nao foi possivel salvar: $error');
+    } finally {
+      if (mounted) {
+        setState(() => _salvando = false);
+      }
+    }
+  }
+
+  Future<void> _salvarAtividade({
+    Atividade? atividade,
+    TipoAtividade? tipoInicial,
+    DateTime? dataInicial,
+  }) async {
+    if (!_role.canManageActivities) {
+      _mostrarMensagem('Somente administradores podem editar atividades.');
+      return;
+    }
+
+    final resultado = await showModalBottomSheet<Atividade>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AtividadeFormSheet(
+        atividade: atividade,
+        turmaInicial: _turmaSelecionada,
+        tipoInicial: tipoInicial,
+        dataInicial: dataInicial,
+      ),
+    );
+
+    if (resultado == null) return;
+
+    setState(() => _salvando = true);
+    try {
+      if (resultado.id == null) {
+        await _atividadeService.criarAtividade(resultado);
+      } else {
+        await _atividadeService.atualizarAtividade(resultado);
+      }
+      await _carregarAulas();
+      _mostrarMensagem('Atividade salva.');
+    } catch (error) {
+      _mostrarMensagem('Nao foi possivel salvar a atividade: $error');
+    } finally {
+      if (mounted) {
+        setState(() => _salvando = false);
+      }
+    }
+  }
+
+  Future<void> _excluirAtividade(Atividade atividade) async {
+    if (!_role.canManageActivities) {
+      _mostrarMensagem('Somente administradores podem excluir atividades.');
+      return;
+    }
+
+    final id = atividade.id;
+    if (id == null) return;
+
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Excluir atividade'),
+          content: Text('Remover ${atividade.titulo} da agenda?'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(context, true),
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Excluir'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmar != true) return;
+
+    setState(() => _salvando = true);
+    try {
+      await _atividadeService.excluirAtividade(id);
+      await _carregarAulas();
+      _mostrarMensagem('Atividade excluida.');
+    } catch (error) {
+      _mostrarMensagem('Nao foi possivel excluir: $error');
     } finally {
       if (mounted) {
         setState(() => _salvando = false);
@@ -312,22 +699,235 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
     return message;
   }
 
+  String get _tabTitle {
+    return switch (_selectedTab) {
+      1 => 'Atividades',
+      2 => 'Calendario',
+      _ => 'WidgetClass',
+    };
+  }
+
+  Widget _buildAulasPage() {
+    final grupos = agruparAulasPorMateria(_aulas);
+    final children = <Widget>[
+      StaggeredEntry(
+        index: 0,
+        child: ClassSelectorCard(
+          turma: _turmaSelecionada,
+          onTap: _selecionarTurma,
+        ),
+      ),
+      const SizedBox(height: 16),
+      StaggeredEntry(
+        index: 1,
+        child: NextClassPanel(aula: _proximaAula, carregando: _carregando),
+      ),
+      const SizedBox(height: 24),
+      StaggeredEntry(
+        index: 2,
+        child: SectionHeader(
+          title: 'Aulas por materia',
+          count: grupos.length,
+          subtitle: _turmaSelecionada.nome,
+        ),
+      ),
+      if (_erro != null) ...<Widget>[
+        const SizedBox(height: 14),
+        ErrorBanner(message: _erro!),
+      ],
+      const SizedBox(height: 14),
+    ];
+
+    if (_carregando && _aulas.isEmpty) {
+      children.add(const LoadingSchedule());
+    } else if (_aulas.isEmpty) {
+      children.add(EmptySchedule(turma: _turmaSelecionada));
+    } else {
+      for (var index = 0; index < grupos.length; index++) {
+        final grupo = grupos[index];
+        children.add(
+          StaggeredEntry(
+            index: index + 3,
+            child: AulaGrupoCard(
+              grupo: grupo,
+              canManage: _role.canManageClasses,
+              canEditRoom: _role.canEditRooms,
+              onEditCard: (aula) => _salvarAula(aula: aula),
+              onEditRoom: _editarSala,
+              onDelete: _excluirAula,
+            ),
+          ),
+        );
+      }
+    }
+
+    return _PageList(children: children);
+  }
+
+  Widget _buildAtividadesPage() {
+    final trabalhos = proximasAtividades(
+      _atividades,
+      tipo: TipoAtividade.trabalho,
+    );
+    final avaliacoes = proximasAtividades(
+      _atividades,
+      tipo: TipoAtividade.avaliacao,
+    );
+
+    return _PageList(
+      children: <Widget>[
+        StaggeredEntry(
+          index: 0,
+          child: ClassSelectorCard(
+            turma: _turmaSelecionada,
+            onTap: _selecionarTurma,
+          ),
+        ),
+        StaggeredEntry(
+          index: 1,
+          child: AgendaSummaryPanel(
+            trabalhos: trabalhos,
+            avaliacoes: avaliacoes,
+          ),
+        ),
+        const SizedBox(height: 22),
+        StaggeredEntry(
+          index: 2,
+          child: SectionHeader(
+            title: 'Agenda da turma',
+            count: _atividades.length,
+            subtitle: 'Trabalhos e avaliacoes',
+          ),
+        ),
+        if (_erro != null) ...<Widget>[
+          const SizedBox(height: 14),
+          ErrorBanner(message: _erro!),
+        ],
+        const SizedBox(height: 14),
+        if (_carregando && _atividades.isEmpty)
+          const LoadingSchedule()
+        else if (_atividades.isEmpty)
+          const EmptyActivities()
+        else ...<Widget>[
+          StaggeredEntry(
+            index: 3,
+            child: ActivitySection(
+              title: 'Proximos trabalhos',
+              icon: Icons.assignment_outlined,
+              atividades: trabalhos,
+              canManage: _role.canManageActivities,
+              onCreate: () =>
+                  _salvarAtividade(tipoInicial: TipoAtividade.trabalho),
+              onEdit: (atividade) => _salvarAtividade(atividade: atividade),
+              onDelete: _excluirAtividade,
+            ),
+          ),
+          const SizedBox(height: 16),
+          StaggeredEntry(
+            index: 4,
+            child: ActivitySection(
+              title: 'Proximas avaliacoes',
+              icon: Icons.fact_check_outlined,
+              atividades: avaliacoes,
+              canManage: _role.canManageActivities,
+              onCreate: () =>
+                  _salvarAtividade(tipoInicial: TipoAtividade.avaliacao),
+              onEdit: (atividade) => _salvarAtividade(atividade: atividade),
+              onDelete: _excluirAtividade,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildCalendarioPage() {
+    return _PageList(
+      children: <Widget>[
+        StaggeredEntry(
+          index: 0,
+          child: ClassSelectorCard(
+            turma: _turmaSelecionada,
+            onTap: _selecionarTurma,
+          ),
+        ),
+        const SizedBox(height: 16),
+        StaggeredEntry(
+          index: 1,
+          child: CalendarPanel(
+            aulas: _aulas,
+            atividades: _atividades,
+            canManage: _role.canManageCalendar,
+            onEditAula: (aula) => _salvarAula(aula: aula),
+            onDeleteAula: _excluirAula,
+            onAddAula: (day) => _salvarAula(diaSemanaInicial: day.weekday),
+            onEditAtividade: (atividade) =>
+                _salvarAtividade(atividade: atividade),
+            onDeleteAtividade: _excluirAtividade,
+            onAddAtividade: (day) => _salvarAtividade(dataInicial: day),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSelectedPage() {
+    return switch (_selectedTab) {
+      1 => _buildAtividadesPage(),
+      2 => _buildCalendarioPage(),
+      _ => _buildAulasPage(),
+    };
+  }
+
+  Widget _buildFab({
+    required bool canAddClasses,
+    required bool canAddActivities,
+  }) {
+    if (_salvando) {
+      return const SizedBox(key: ValueKey<String>('fab_none'));
+    }
+    if (_selectedTab == 0 && canAddClasses) {
+      return FloatingActionButton.extended(
+        key: const ValueKey<String>('fab_aulas'),
+        onPressed: () => _salvarAula(),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Nova aula'),
+      );
+    }
+    if (_selectedTab == 1 && canAddActivities) {
+      return FloatingActionButton.extended(
+        key: const ValueKey<String>('fab_atividades'),
+        onPressed: () => _salvarAtividade(),
+        icon: const Icon(Icons.add_task_rounded),
+        label: const Text('Nova atividade'),
+      );
+    }
+    return const SizedBox(key: ValueKey<String>('fab_none'));
+  }
+
   @override
   Widget build(BuildContext context) {
-    final canAdd = _role.canManageClasses;
+    final canAddClasses = _role.canManageClasses;
+    final canAddActivities = _role.canManageActivities;
 
     return Scaffold(
       drawer: AppDrawer(
         role: _role,
         user: _user,
         turma: _turmaSelecionada,
+        themeMode: widget.themeMode,
         onLogin: _entrarComEmail,
         onLogout: _sair,
         onSelectTurma: _selecionarTurma,
-        onNewClass: canAdd ? () => _salvarAula() : null,
+        onThemeModeChanged: widget.onThemeModeChanged,
+        onNewClass: canAddClasses ? () => _salvarAula() : null,
+        onNewActivity: canAddActivities ? () => _salvarAtividade() : null,
       ),
       appBar: AppBar(
-        title: const Text('WidgetClass'),
+        title: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 260),
+          child: Text(_tabTitle, key: ValueKey<String>(_tabTitle)),
+        ),
         centerTitle: false,
         backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
@@ -339,53 +939,62 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
           ),
         ],
       ),
-      floatingActionButton: canAdd
-          ? FloatingActionButton.extended(
-              onPressed: _salvando ? null : () => _salvarAula(),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Nova aula'),
-            )
-          : null,
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedTab,
+        onDestinationSelected: (value) => setState(() => _selectedTab = value),
+        destinations: const <NavigationDestination>[
+          NavigationDestination(
+            icon: Icon(Icons.school_outlined),
+            selectedIcon: Icon(Icons.school_rounded),
+            label: 'Aulas',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.assignment_outlined),
+            selectedIcon: Icon(Icons.assignment_turned_in_rounded),
+            label: 'Agenda',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.calendar_month_outlined),
+            selectedIcon: Icon(Icons.calendar_month_rounded),
+            label: 'Calendario',
+          ),
+        ],
+      ),
+      floatingActionButton: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 260),
+        switchInCurve: Curves.easeOutBack,
+        switchOutCurve: Curves.easeInCubic,
+        child: _buildFab(
+          canAddClasses: canAddClasses,
+          canAddActivities: canAddActivities,
+        ),
+      ),
       body: Stack(
         children: <Widget>[
           const AppBackdrop(),
           RefreshIndicator(
             onRefresh: _carregarAulas,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 110),
-              children: <Widget>[
-                ClassSelectorCard(
-                  turma: _turmaSelecionada,
-                  onTap: _selecionarTurma,
-                ),
-                const SizedBox(height: 16),
-                NextClassPanel(aula: _proximaAula, carregando: _carregando),
-                const SizedBox(height: 24),
-                SectionHeader(
-                  title: 'Aulas da semana',
-                  count: _aulas.length,
-                  subtitle: _turmaSelecionada.nome,
-                ),
-                if (_erro != null) ...<Widget>[
-                  const SizedBox(height: 14),
-                  ErrorBanner(message: _erro!),
-                ],
-                const SizedBox(height: 14),
-                if (_carregando && _aulas.isEmpty)
-                  const LoadingSchedule()
-                else if (_aulas.isEmpty)
-                  EmptySchedule(turma: _turmaSelecionada)
-                else
-                  for (final aula in _aulas)
-                    AulaCard(
-                      aula: aula,
-                      canManage: _role.canManageClasses,
-                      canEditRoom: _role.canEditRooms,
-                      onEditCard: () => _salvarAula(aula: aula),
-                      onEditRoom: () => _editarSala(aula),
-                      onDelete: () => _excluirAula(aula),
-                    ),
-              ],
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 360),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                final offsetAnimation = Tween<Offset>(
+                  begin: const Offset(0.04, 0.02),
+                  end: Offset.zero,
+                ).animate(animation);
+                return FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: offsetAnimation,
+                    child: child,
+                  ),
+                );
+              },
+              child: KeyedSubtree(
+                key: ValueKey<int>(_selectedTab),
+                child: _buildSelectedPage(),
+              ),
             ),
           ),
           if (_salvando)
@@ -401,24 +1010,393 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
   }
 }
 
-class AppBackdrop extends StatelessWidget {
+class AppBackdrop extends StatefulWidget {
   const AppBackdrop({super.key});
 
   @override
+  State<AppBackdrop> createState() => _AppBackdropState();
+}
+
+class _AppBackdropState extends State<AppBackdrop>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 8),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return const DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: <Color>[
-            Color(0xFFEAF8F8),
-            Color(0xFFF4F0FF),
-            Color(0xFFF8FAFC),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final begin = Alignment.lerp(
+          Alignment.topLeft,
+          Alignment.topRight,
+          _controller.value,
+        )!;
+        final end = Alignment.lerp(
+          Alignment.bottomRight,
+          Alignment.bottomLeft,
+          _controller.value,
+        )!;
+        final blobA = Alignment.lerp(
+          const Alignment(-0.8, -0.8),
+          const Alignment(0.9, 0.1),
+          _controller.value,
+        )!;
+        final blobB = Alignment.lerp(
+          const Alignment(0.9, 0.95),
+          const Alignment(-0.6, -0.2),
+          _controller.value,
+        )!;
+        return Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDark
+                      ? const <Color>[
+                          Color(0xFF0A1522),
+                          Color(0xFF111C2B),
+                          Color(0xFF1A1B33),
+                        ]
+                      : const <Color>[
+                          Color(0xFFEAF8F8),
+                          Color(0xFFF4F0FF),
+                          Color(0xFFF8FAFC),
+                        ],
+                  begin: begin,
+                  end: end,
+                ),
+              ),
+            ),
+            Align(
+              alignment: blobA,
+              child: _BackdropBlob(
+                color: isDark
+                    ? const Color(0xFF1B9AAA).withValues(alpha: 0.22)
+                    : const Color(0xFF1B9AAA).withValues(alpha: 0.17),
+                size: 240,
+              ),
+            ),
+            Align(
+              alignment: blobB,
+              child: _BackdropBlob(
+                color: isDark
+                    ? const Color(0xFF5B7CFA).withValues(alpha: 0.16)
+                    : const Color(0xFF7C3AED).withValues(alpha: 0.13),
+                size: 280,
+              ),
+            ),
+            const SizedBox.expand(),
           ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+        );
+      },
+    );
+  }
+}
+
+class _BackdropBlob extends StatelessWidget {
+  const _BackdropBlob({required this.color, required this.size});
+
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: color,
+              blurRadius: size * 0.40,
+              spreadRadius: size * 0.05,
+            ),
+          ],
         ),
       ),
-      child: SizedBox.expand(),
+    );
+  }
+}
+
+class _PageList extends StatelessWidget {
+  const _PageList({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 110),
+      children: children,
+    );
+  }
+}
+
+class StaggeredEntry extends StatelessWidget {
+  const StaggeredEntry({required this.index, required this.child, super.key});
+
+  final int index;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: Duration(milliseconds: 420 + index * 60),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, 22 * (1 - value)),
+            child: Transform.scale(scale: 0.98 + (0.02 * value), child: child),
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+}
+
+class AulaGrupo {
+  const AulaGrupo({required this.disciplina, required this.aulas});
+
+  final String disciplina;
+  final List<Aula> aulas;
+
+  Aula get principal => aulas.first;
+
+  String get professores {
+    final names = aulas.map((aula) => aula.professor).toSet().toList();
+    return names.join(' / ');
+  }
+
+  String get salas {
+    final rooms = aulas.map((aula) => aula.sala).toSet().toList();
+    return rooms.join(' / ');
+  }
+}
+
+List<AulaGrupo> agruparAulasPorMateria(List<Aula> aulas) {
+  final grouped = <String, List<Aula>>{};
+  for (final aula in aulas) {
+    final key = aula.disciplina.trim().toLowerCase();
+    grouped.putIfAbsent(key, () => <Aula>[]).add(aula);
+  }
+
+  final grupos = grouped.entries.map((entry) {
+    final aulasOrdenadas = [...entry.value]
+      ..sort((a, b) {
+        final dayCompare = a.diaSemana.compareTo(b.diaSemana);
+        if (dayCompare != 0) return dayCompare;
+        return a.horarioInicio.compareTo(b.horarioInicio);
+      });
+    return AulaGrupo(
+      disciplina: aulasOrdenadas.first.disciplina,
+      aulas: aulasOrdenadas,
+    );
+  }).toList()..sort((a, b) => a.disciplina.compareTo(b.disciplina));
+
+  return grupos;
+}
+
+class AulaGrupoCard extends StatelessWidget {
+  const AulaGrupoCard({
+    required this.grupo,
+    required this.canManage,
+    required this.canEditRoom,
+    required this.onEditCard,
+    required this.onEditRoom,
+    required this.onDelete,
+    super.key,
+  });
+
+  final AulaGrupo grupo;
+  final bool canManage;
+  final bool canEditRoom;
+  final ValueChanged<Aula> onEditCard;
+  final ValueChanged<Aula> onEditRoom;
+  final ValueChanged<Aula> onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final aula = grupo.principal;
+    final color = colorFromHex(aula.corHex);
+    final hasImage = aula.imagemUrl?.isNotEmpty == true;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 560),
+        curve: Curves.easeOutBack,
+        builder: (context, value, child) {
+          return Transform.scale(scale: 0.96 + value * 0.04, child: child);
+        },
+        child: GlassPanel(
+          borderRadius: 26,
+          padding: EdgeInsets.zero,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 320),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(26),
+              image: hasImage
+                  ? DecorationImage(
+                      image: NetworkImage(aula.imagemUrl!),
+                      fit: BoxFit.cover,
+                      colorFilter: ColorFilter.mode(
+                        Colors.black.withValues(alpha: 0.25),
+                        BlendMode.darken,
+                      ),
+                    )
+                  : null,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Container(
+                    width: 70,
+                    height: 70,
+                    decoration: BoxDecoration(
+                      color: hasImage
+                          ? Colors.white.withValues(alpha: 0.22)
+                          : color,
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    child: Center(
+                      child: Text(
+                        aula.icone,
+                        style: const TextStyle(fontSize: 30),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          grupo.disciplina,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                color: hasImage
+                                    ? Colors.white
+                                    : Theme.of(context).colorScheme.onSurface,
+                                fontWeight: FontWeight.w900,
+                                height: 1.08,
+                              ),
+                        ),
+                        const SizedBox(height: 9),
+                        Text(
+                          grupo.professores,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: hasImage
+                                ? Colors.white.withValues(alpha: 0.86)
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: <Widget>[
+                            GlassChip(
+                              icon: Icons.meeting_room_outlined,
+                              text: grupo.salas,
+                              dark: hasImage,
+                            ),
+                            for (final item in grupo.aulas)
+                              GlassChip(
+                                icon: Icons.schedule_rounded,
+                                text:
+                                    '${nomesDiasSemana[item.diaSemana] ?? 'Dia ${item.diaSemana}'} ${item.intervaloFormatado}',
+                                dark: hasImage,
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (canManage || canEditRoom)
+                    PopupMenuButton<String>(
+                      tooltip: 'Editar',
+                      icon: Icon(
+                        Icons.more_vert_rounded,
+                        color: hasImage ? Colors.white : null,
+                      ),
+                      onSelected: (value) {
+                        final parts = value.split('|');
+                        if (parts.length != 2) return;
+                        final target = grupo.aulas.firstWhere(
+                          (aula) => aula.id == parts[1],
+                          orElse: () => grupo.principal,
+                        );
+                        if (parts[0] == 'card') onEditCard(target);
+                        if (parts[0] == 'room') onEditRoom(target);
+                        if (parts[0] == 'delete') onDelete(target);
+                      },
+                      itemBuilder: (context) {
+                        return <PopupMenuEntry<String>>[
+                          for (final item
+                              in grupo.aulas) ...<PopupMenuEntry<String>>[
+                            if (canManage)
+                              PopupMenuItem<String>(
+                                value: 'card|${item.id}',
+                                child: Text(
+                                  'Editar ${item.intervaloFormatado}',
+                                ),
+                              ),
+                            if (canEditRoom)
+                              PopupMenuItem<String>(
+                                value: 'room|${item.id}',
+                                child: Text('Sala ${item.intervaloFormatado}'),
+                              ),
+                            if (canManage)
+                              PopupMenuItem<String>(
+                                value: 'delete|${item.id}',
+                                child: Text(
+                                  'Excluir ${item.intervaloFormatado}',
+                                ),
+                              ),
+                          ],
+                        ];
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -439,19 +1417,27 @@ class GlassPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final panelColor = isDark
+        ? color.withValues(alpha: 0.22)
+        : color.withValues(alpha: 0.72);
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
       child: Container(
         padding: padding,
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.72),
+          color: panelColor,
           borderRadius: BorderRadius.circular(borderRadius),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.70)),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.16)
+                : Colors.white.withValues(alpha: 0.70),
+          ),
           boxShadow: <BoxShadow>[
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.055),
-              blurRadius: 16,
-              offset: const Offset(0, 8),
+              color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.055),
+              blurRadius: isDark ? 22 : 16,
+              offset: const Offset(0, 10),
             ),
           ],
         ),
@@ -466,27 +1452,33 @@ class AppDrawer extends StatelessWidget {
     required this.role,
     required this.user,
     required this.turma,
+    required this.themeMode,
     required this.onLogin,
     required this.onLogout,
     required this.onSelectTurma,
+    required this.onThemeModeChanged,
     required this.onNewClass,
+    required this.onNewActivity,
     super.key,
   });
 
   final AppRole role;
   final User? user;
   final Turma turma;
+  final ThemeMode themeMode;
   final VoidCallback onLogin;
   final VoidCallback onLogout;
   final VoidCallback onSelectTurma;
+  final ValueChanged<ThemeMode> onThemeModeChanged;
   final VoidCallback? onNewClass;
+  final VoidCallback? onNewActivity;
 
   @override
   Widget build(BuildContext context) {
     final email = user?.email;
 
     return Drawer(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       child: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(16),
@@ -496,7 +1488,7 @@ class AppDrawer extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  const Icon(Icons.grid_view_rounded, size: 34),
+                  const WidgetClassLogoMark(size: 58),
                   const SizedBox(height: 16),
                   Text(
                     'WidgetClass',
@@ -508,7 +1500,7 @@ class AppDrawer extends StatelessWidget {
                   Text(
                     turma.nome,
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: const Color(0xFF526070),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -516,6 +1508,45 @@ class AppDrawer extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 18),
+            GlassPanel(
+              borderRadius: 22,
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text(
+                    'Tema',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 10),
+                  SegmentedButton<ThemeMode>(
+                    selected: <ThemeMode>{themeMode},
+                    onSelectionChanged: (values) {
+                      if (values.isEmpty) return;
+                      onThemeModeChanged(values.first);
+                    },
+                    segments: const <ButtonSegment<ThemeMode>>[
+                      ButtonSegment<ThemeMode>(
+                        value: ThemeMode.system,
+                        icon: Icon(Icons.brightness_auto_outlined),
+                        label: Text('Auto'),
+                      ),
+                      ButtonSegment<ThemeMode>(
+                        value: ThemeMode.light,
+                        icon: Icon(Icons.light_mode_outlined),
+                        label: Text('Claro'),
+                      ),
+                      ButtonSegment<ThemeMode>(
+                        value: ThemeMode.dark,
+                        icon: Icon(Icons.dark_mode_outlined),
+                        label: Text('Escuro'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
             DrawerActionTile(
               icon: Icons.school_outlined,
               title: 'Selecionar turma',
@@ -569,7 +1600,20 @@ class AppDrawer extends StatelessWidget {
                   icon: Icons.add_rounded,
                   title: 'Adicionar aula',
                   subtitle: 'Criar card na turma',
-                  onTap: onNewClass,
+                  onTap: () {
+                    Navigator.pop(context);
+                    onNewClass?.call();
+                  },
+                ),
+              if (role == AppRole.admin)
+                DrawerActionTile(
+                  icon: Icons.add_task_rounded,
+                  title: 'Adicionar atividade',
+                  subtitle: 'Criar item na agenda',
+                  onTap: () {
+                    Navigator.pop(context);
+                    onNewActivity?.call();
+                  },
                 ),
               if (role == AppRole.staff)
                 const Padding(
@@ -661,10 +1705,10 @@ class ClassSelectorCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  const Text(
+                  Text(
                     'Turma selecionada',
                     style: TextStyle(
-                      color: Color(0xFF526070),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -790,15 +1834,25 @@ class GlassChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = dark ? Colors.white : const Color(0xFF17212B);
+    final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
+    final hasDarkSurface = dark || isDarkTheme;
+    final foreground = hasDarkSurface
+        ? Colors.white
+        : Theme.of(context).colorScheme.onSurface;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: (dark ? Colors.white : Colors.white).withValues(
-          alpha: dark ? 0.20 : 0.56,
+        color: Colors.white.withValues(
+          alpha: dark
+              ? 0.20
+              : isDarkTheme
+              ? 0.14
+              : 0.56,
         ),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: dark ? 0.35 : 0.22),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -818,6 +1872,850 @@ class GlassChip extends StatelessWidget {
       ),
     );
   }
+}
+
+class AgendaSummaryPanel extends StatelessWidget {
+  const AgendaSummaryPanel({
+    required this.trabalhos,
+    required this.avaliacoes,
+    super.key,
+  });
+
+  final List<Atividade> trabalhos;
+  final List<Atividade> avaliacoes;
+
+  @override
+  Widget build(BuildContext context) {
+    final trabalho = trabalhos.isEmpty ? null : trabalhos.first;
+    final avaliacao = avaliacoes.isEmpty ? null : avaliacoes.first;
+
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: _AgendaSummaryCard(
+            icon: Icons.assignment_outlined,
+            title: 'Trabalhos',
+            count: trabalhos.length,
+            atividade: trabalho,
+            color: const Color(0xFF1B9AAA),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _AgendaSummaryCard(
+            icon: Icons.fact_check_outlined,
+            title: 'Avaliacoes',
+            count: avaliacoes.length,
+            atividade: avaliacao,
+            color: const Color(0xFF5B7CFA),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AgendaSummaryCard extends StatelessWidget {
+  const _AgendaSummaryCard({
+    required this.icon,
+    required this.title,
+    required this.count,
+    required this.atividade,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String title;
+  final int count;
+  final Atividade? atividade;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final details = atividade == null
+        ? 'Agenda livre'
+        : '${atividade!.materia} - ${atividade!.dataFormatada}';
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 460),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        return Transform.translate(
+          offset: Offset(0, 10 * (1 - value)),
+          child: Opacity(opacity: value, child: child),
+        );
+      },
+      child: GlassPanel(
+        borderRadius: 24,
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: Colors.white, size: 22),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                ),
+                Text(
+                  '$count',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(
+              atividade?.titulo ?? 'Nada marcado',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              details,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ActivitySection extends StatelessWidget {
+  const ActivitySection({
+    required this.title,
+    required this.icon,
+    required this.atividades,
+    required this.canManage,
+    required this.onCreate,
+    required this.onEdit,
+    required this.onDelete,
+    super.key,
+  });
+
+  final String title;
+  final IconData icon;
+  final List<Atividade> atividades;
+  final bool canManage;
+  final VoidCallback onCreate;
+  final ValueChanged<Atividade> onEdit;
+  final ValueChanged<Atividade> onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        SectionHeader(
+          title: title,
+          subtitle: atividades.isEmpty ? 'Nada marcado' : 'Em ordem de data',
+          count: atividades.length,
+        ),
+        const SizedBox(height: 12),
+        if (canManage)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: onCreate,
+                icon: const Icon(Icons.add_circle_outline_rounded),
+                label: const Text('Adicionar item'),
+              ),
+            ),
+          ),
+        if (atividades.isEmpty)
+          GlassPanel(
+            borderRadius: 22,
+            child: Row(
+              children: <Widget>[
+                Icon(icon),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Sem itens proximos.',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          for (var index = 0; index < atividades.length; index++)
+            ActivityCard(
+              atividade: atividades[index],
+              index: index,
+              canManage: canManage,
+              onEdit: onEdit,
+              onDelete: onDelete,
+            ),
+      ],
+    );
+  }
+}
+
+class ActivityCard extends StatelessWidget {
+  const ActivityCard({
+    required this.atividade,
+    required this.index,
+    required this.canManage,
+    required this.onEdit,
+    required this.onDelete,
+    super.key,
+  });
+
+  final Atividade atividade;
+  final int index;
+  final bool canManage;
+  final ValueChanged<Atividade> onEdit;
+  final ValueChanged<Atividade> onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = colorFromHex(atividade.corHex);
+    final status = _daysUntilText(atividade.data);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(begin: 0, end: 1),
+        duration: Duration(milliseconds: 360 + index * 50),
+        curve: Curves.easeOutCubic,
+        builder: (context, value, child) {
+          return Transform.translate(
+            offset: Offset(18 * (1 - value), 0),
+            child: Opacity(opacity: value, child: child),
+          );
+        },
+        child: GlassPanel(
+          borderRadius: 22,
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: <Color>[color, color.withValues(alpha: 0.68)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(
+                  atividade.tipo == TipoAtividade.trabalho
+                      ? Icons.assignment_outlined
+                      : Icons.fact_check_outlined,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Expanded(
+                          child: Text(
+                            atividade.titulo,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w900),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 240),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            status,
+                            style: TextStyle(
+                              color: color,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        if (canManage)
+                          PopupMenuButton<String>(
+                            tooltip: 'Editar atividade',
+                            icon: const Icon(Icons.more_vert_rounded),
+                            onSelected: (value) {
+                              if (value == 'edit') onEdit(atividade);
+                              if (value == 'delete') onDelete(atividade);
+                            },
+                            itemBuilder: (context) => <PopupMenuEntry<String>>[
+                              const PopupMenuItem<String>(
+                                value: 'edit',
+                                child: Text('Editar'),
+                              ),
+                              const PopupMenuItem<String>(
+                                value: 'delete',
+                                child: Text('Excluir'),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                    if (atividade.descricao?.isNotEmpty == true) ...<Widget>[
+                      const SizedBox(height: 6),
+                      Text(
+                        atividade.descricao!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: <Widget>[
+                        GlassChip(
+                          icon: Icons.menu_book_outlined,
+                          text: atividade.materia,
+                        ),
+                        GlassChip(
+                          icon: Icons.event_outlined,
+                          text: atividade.dataFormatada,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class CalendarPanel extends StatefulWidget {
+  const CalendarPanel({
+    required this.aulas,
+    required this.atividades,
+    required this.canManage,
+    required this.onEditAula,
+    required this.onDeleteAula,
+    required this.onAddAula,
+    required this.onEditAtividade,
+    required this.onDeleteAtividade,
+    required this.onAddAtividade,
+    super.key,
+  });
+
+  final List<Aula> aulas;
+  final List<Atividade> atividades;
+  final bool canManage;
+  final ValueChanged<Aula> onEditAula;
+  final ValueChanged<Aula> onDeleteAula;
+  final ValueChanged<DateTime> onAddAula;
+  final ValueChanged<Atividade> onEditAtividade;
+  final ValueChanged<Atividade> onDeleteAtividade;
+  final ValueChanged<DateTime> onAddAtividade;
+
+  @override
+  State<CalendarPanel> createState() => _CalendarPanelState();
+}
+
+class _CalendarPanelState extends State<CalendarPanel> {
+  late DateTime _month;
+  late DateTime _selectedDay;
+
+  @override
+  void initState() {
+    super.initState();
+    final today = DateTime.now();
+    _month = DateTime(today.year, today.month);
+    _selectedDay = DateTime(today.year, today.month, today.day);
+  }
+
+  void _moveMonth(int delta) {
+    setState(() {
+      _month = DateTime(_month.year, _month.month + delta);
+      _selectedDay = DateTime(_month.year, _month.month, 1);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
+    final firstDay = DateTime(_month.year, _month.month);
+    final daysInMonth = DateTime(_month.year, _month.month + 1, 0).day;
+    final leadingBlanks = firstDay.weekday - 1;
+    final cells = <DateTime?>[
+      for (var i = 0; i < leadingBlanks; i++) null,
+      for (var day = 1; day <= daysInMonth; day++)
+        DateTime(_month.year, _month.month, day),
+    ];
+    while (cells.length % 7 != 0) {
+      cells.add(null);
+    }
+
+    final aulasDoDia =
+        widget.aulas
+            .where((aula) => aula.diaSemana == _selectedDay.weekday)
+            .toList()
+          ..sort((a, b) => a.horarioInicio.compareTo(b.horarioInicio));
+    final atividadesDoDia =
+        widget.atividades
+            .where((atividade) => atividade.aconteceEm(_selectedDay))
+            .toList()
+          ..sort((a, b) => a.data.compareTo(b.data));
+
+    return GlassPanel(
+      borderRadius: 30,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              IconButton(
+                tooltip: 'Mes anterior',
+                onPressed: () => _moveMonth(-1),
+                icon: const Icon(Icons.chevron_left_rounded),
+              ),
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 260),
+                  child: Text(
+                    '${_monthName(_month.month)} ${_month.year}',
+                    key: ValueKey<String>('${_month.month}-${_month.year}'),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Proximo mes',
+                onPressed: () => _moveMonth(1),
+                icon: const Icon(Icons.chevron_right_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: const <Widget>[
+              _WeekdayLabel('S'),
+              _WeekdayLabel('T'),
+              _WeekdayLabel('Q'),
+              _WeekdayLabel('Q'),
+              _WeekdayLabel('S'),
+              _WeekdayLabel('S'),
+              _WeekdayLabel('D'),
+            ],
+          ),
+          const SizedBox(height: 8),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+            ),
+            itemCount: cells.length,
+            itemBuilder: (context, index) {
+              final day = cells[index];
+              if (day == null) return const SizedBox.shrink();
+              final hasClass = widget.aulas.any(
+                (aula) => aula.diaSemana == day.weekday,
+              );
+              final hasActivity = widget.atividades.any(
+                (atividade) => atividade.aconteceEm(day),
+              );
+              final selected = _sameDate(day, _selectedDay);
+              final today = _sameDate(day, DateTime.now());
+              return AnimatedCalendarDay(
+                day: day,
+                selected: selected,
+                today: today,
+                hasClass: hasClass,
+                hasActivity: hasActivity,
+                onTap: () => setState(() => _selectedDay = day),
+              );
+            },
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'Dia ${_selectedDay.day}',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 10),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 260),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            child: Column(
+              key: ValueKey<String>(
+                '${_selectedDay.year}-${_selectedDay.month}-${_selectedDay.day}',
+              ),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                if (aulasDoDia.isEmpty && atividadesDoDia.isEmpty)
+                  Text(
+                    'Nada marcado para esse dia.',
+                    style: TextStyle(
+                      color: onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  )
+                else ...<Widget>[
+                  for (final aula in aulasDoDia)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _CalendarEventTile(
+                        icon: Icons.school_outlined,
+                        title: aula.disciplina,
+                        subtitle:
+                            '${aula.intervaloFormatado} - sala ${aula.sala}',
+                        canManage: widget.canManage,
+                        color: colorFromHex(aula.corHex),
+                        onEdit: () => widget.onEditAula(aula),
+                        onDelete: () => widget.onDeleteAula(aula),
+                      ),
+                    ),
+                  for (final atividade in atividadesDoDia)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _CalendarEventTile(
+                        icon: atividade.tipo == TipoAtividade.trabalho
+                            ? Icons.assignment_outlined
+                            : Icons.fact_check_outlined,
+                        title: atividade.titulo,
+                        subtitle: atividade.materia,
+                        canManage: widget.canManage,
+                        color: colorFromHex(atividade.corHex),
+                        onEdit: () => widget.onEditAtividade(atividade),
+                        onDelete: () => widget.onDeleteAtividade(atividade),
+                      ),
+                    ),
+                ],
+              ],
+            ),
+          ),
+          if (widget.canManage) ...<Widget>[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                OutlinedButton.icon(
+                  onPressed: () => widget.onAddAula(_selectedDay),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Nova aula no dia'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => widget.onAddAtividade(_selectedDay),
+                  icon: const Icon(Icons.add_task_rounded),
+                  label: const Text('Nova atividade no dia'),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CalendarEventTile extends StatelessWidget {
+  const _CalendarEventTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.canManage,
+    required this.color,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool canManage;
+  final Color color;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassPanel(
+      borderRadius: 18,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.20),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 18, color: color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (canManage)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_horiz_rounded),
+              onSelected: (value) {
+                if (value == 'edit') onEdit();
+                if (value == 'delete') onDelete();
+              },
+              itemBuilder: (context) => const <PopupMenuEntry<String>>[
+                PopupMenuItem<String>(value: 'edit', child: Text('Editar')),
+                PopupMenuItem<String>(value: 'delete', child: Text('Excluir')),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeekdayLabel extends StatelessWidget {
+  const _WeekdayLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Center(
+        child: Text(
+          text,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class AnimatedCalendarDay extends StatelessWidget {
+  const AnimatedCalendarDay({
+    required this.day,
+    required this.selected,
+    required this.today,
+    required this.hasClass,
+    required this.hasActivity,
+    required this.onTap,
+    super.key,
+  });
+
+  final DateTime day;
+  final bool selected;
+  final bool today;
+  final bool hasClass;
+  final bool hasActivity;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final color = selected
+        ? const Color(0xFF1B9AAA)
+        : today
+        ? Theme.of(
+            context,
+          ).colorScheme.primary.withValues(alpha: isDark ? 0.28 : 0.16)
+        : (isDark
+              ? Colors.white.withValues(alpha: 0.10)
+              : Colors.white.withValues(alpha: 0.54));
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(selected ? 18 : 14),
+          border: Border.all(
+            color: selected
+                ? const Color(0xFF1B9AAA)
+                : Colors.white.withValues(alpha: 0.8),
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            Text(
+              '${day.day}',
+              style: TextStyle(
+                color: selected ? Colors.white : onSurface,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                _CalendarDot(active: hasClass, color: const Color(0xFF5B7CFA)),
+                const SizedBox(width: 3),
+                _CalendarDot(
+                  active: hasActivity,
+                  color: const Color(0xFFFF4D6D),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CalendarDot extends StatelessWidget {
+  const _CalendarDot({required this.active, required this.color});
+
+  final bool active;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      width: active ? 6 : 3,
+      height: active ? 6 : 3,
+      decoration: BoxDecoration(
+        color: active ? color : Colors.transparent,
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+}
+
+class EmptyActivities extends StatelessWidget {
+  const EmptyActivities({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const GlassPanel(
+      borderRadius: 24,
+      child: Row(
+        children: <Widget>[
+          Icon(Icons.event_available_outlined),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Nenhum trabalho ou avaliacao cadastrado.',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+bool _sameDate(DateTime a, DateTime b) {
+  return a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+String _daysUntilText(DateTime target) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final date = DateTime(target.year, target.month, target.day);
+  final days = date.difference(today).inDays;
+  if (days == 0) return 'Hoje';
+  if (days == 1) return 'Amanha';
+  if (days < 0) return 'Passou';
+  return '${days}d';
+}
+
+String _monthName(int month) {
+  const names = <String>[
+    'Janeiro',
+    'Fevereiro',
+    'Marco',
+    'Abril',
+    'Maio',
+    'Junho',
+    'Julho',
+    'Agosto',
+    'Setembro',
+    'Outubro',
+    'Novembro',
+    'Dezembro',
+  ];
+  return names[month - 1];
 }
 
 class SectionHeader extends StatelessWidget {
@@ -848,8 +2746,8 @@ class SectionHeader extends StatelessWidget {
               ),
               Text(
                 subtitle,
-                style: const TextStyle(
-                  color: Color(0xFF526070),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -939,7 +2837,7 @@ class AulaCard extends StatelessWidget {
                             ?.copyWith(
                               color: hasImage
                                   ? Colors.white
-                                  : const Color(0xFF111827),
+                                  : Theme.of(context).colorScheme.onSurface,
                               fontWeight: FontWeight.w900,
                               height: 1.08,
                             ),
@@ -974,7 +2872,7 @@ class AulaCard extends StatelessWidget {
                         style: TextStyle(
                           color: hasImage
                               ? Colors.white.withValues(alpha: 0.86)
-                              : const Color(0xFF526070),
+                              : Theme.of(context).colorScheme.onSurfaceVariant,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -1074,10 +2972,10 @@ class _EmailLoginSheetState extends State<EmailLoginSheet> {
               ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Entre com um usuario criado manualmente no Supabase.',
               style: TextStyle(
-                color: Color(0xFF526070),
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -1192,10 +3090,16 @@ class TurmaPickerSheet extends StatelessWidget {
 }
 
 class AulaFormSheet extends StatefulWidget {
-  const AulaFormSheet({required this.turmaInicial, this.aula, super.key});
+  const AulaFormSheet({
+    required this.turmaInicial,
+    this.aula,
+    this.diaSemanaInicial,
+    super.key,
+  });
 
   final Turma turmaInicial;
   final Aula? aula;
+  final int? diaSemanaInicial;
 
   @override
   State<AulaFormSheet> createState() => _AulaFormSheetState();
@@ -1224,7 +3128,9 @@ class _AulaFormSheetState extends State<AulaFormSheet> {
     _iconeController = TextEditingController(text: aula?.icone ?? '📘');
     _imagemUrlController = TextEditingController(text: aula?.imagemUrl ?? '');
     _turmaId = aula?.turmaId ?? widget.turmaInicial.id;
-    _diaSemana = aula?.diaSemana ?? DateTime.now().weekday.clamp(1, 5);
+    _diaSemana =
+        aula?.diaSemana ??
+        (widget.diaSemanaInicial?.clamp(1, 7) ?? DateTime.now().weekday);
     _horarioInicio = aula?.horarioInicio ?? const Duration(hours: 7);
     _horarioFim = aula?.horarioFim ?? const Duration(hours: 8, minutes: 40);
     _corHex = Aula.normalizeHex(aula?.corHex ?? '#1B9AAA');
@@ -1441,6 +3347,223 @@ class _AulaFormSheetState extends State<AulaFormSheet> {
   }
 }
 
+class AtividadeFormSheet extends StatefulWidget {
+  const AtividadeFormSheet({
+    required this.turmaInicial,
+    this.atividade,
+    this.tipoInicial,
+    this.dataInicial,
+    super.key,
+  });
+
+  final Turma turmaInicial;
+  final Atividade? atividade;
+  final TipoAtividade? tipoInicial;
+  final DateTime? dataInicial;
+
+  @override
+  State<AtividadeFormSheet> createState() => _AtividadeFormSheetState();
+}
+
+class _AtividadeFormSheetState extends State<AtividadeFormSheet> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _materiaController;
+  late final TextEditingController _tituloController;
+  late final TextEditingController _descricaoController;
+  late String _turmaId;
+  late TipoAtividade _tipo;
+  late DateTime _data;
+  late String _corHex;
+
+  @override
+  void initState() {
+    super.initState();
+    final atividade = widget.atividade;
+    _materiaController = TextEditingController(text: atividade?.materia ?? '');
+    _tituloController = TextEditingController(text: atividade?.titulo ?? '');
+    _descricaoController = TextEditingController(
+      text: atividade?.descricao ?? '',
+    );
+    _turmaId = atividade?.turmaId ?? widget.turmaInicial.id;
+    _tipo = atividade?.tipo ?? widget.tipoInicial ?? TipoAtividade.trabalho;
+    _data =
+        atividade?.data ??
+        DateTime(
+          (widget.dataInicial ?? DateTime.now()).year,
+          (widget.dataInicial ?? DateTime.now()).month,
+          (widget.dataInicial ?? DateTime.now()).day,
+        );
+    _corHex = atividade?.corHex ?? '#1B9AAA';
+  }
+
+  @override
+  void dispose() {
+    _materiaController.dispose();
+    _tituloController.dispose();
+    _descricaoController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _selecionarData() async {
+    final base = DateTime.now();
+    final firstDate = DateTime(base.year - 1);
+    final lastDate = DateTime(base.year + 3, 12, 31);
+    final selecionada = await showDatePicker(
+      context: context,
+      initialDate: _data,
+      firstDate: firstDate,
+      lastDate: lastDate,
+    );
+    if (selecionada == null) return;
+    setState(() {
+      _data = DateTime(selecionada.year, selecionada.month, selecionada.day);
+    });
+  }
+
+  void _salvar() {
+    if (!_formKey.currentState!.validate()) return;
+
+    Navigator.pop(
+      context,
+      Atividade(
+        id: widget.atividade?.id,
+        turmaId: _turmaId,
+        materia: _materiaController.text,
+        titulo: _tituloController.text,
+        tipo: _tipo,
+        data: _data,
+        descricao: _descricaoController.text,
+        corHex: _corHex,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SheetShell(
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              widget.atividade == null ? 'Nova atividade' : 'Editar atividade',
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 18),
+            DropdownButtonFormField<String>(
+              initialValue: _turmaId,
+              decoration: const InputDecoration(
+                labelText: 'Turma',
+                prefixIcon: Icon(Icons.school_outlined),
+              ),
+              items: turmasDisponiveis
+                  .map(
+                    (turma) => DropdownMenuItem<String>(
+                      value: turma.id,
+                      child: Text(turma.nome),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) setState(() => _turmaId = value);
+              },
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<TipoAtividade>(
+              initialValue: _tipo,
+              decoration: const InputDecoration(
+                labelText: 'Tipo',
+                prefixIcon: Icon(Icons.assignment_outlined),
+              ),
+              items: TipoAtividade.values
+                  .map(
+                    (tipo) => DropdownMenuItem<TipoAtividade>(
+                      value: tipo,
+                      child: Text(tipo.label),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) setState(() => _tipo = value);
+              },
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _materiaController,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Materia',
+                prefixIcon: Icon(Icons.menu_book_outlined),
+              ),
+              validator: _requiredValidator,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _tituloController,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Titulo',
+                prefixIcon: Icon(Icons.title_rounded),
+              ),
+              validator: _requiredValidator,
+            ),
+            const SizedBox(height: 12),
+            FilledButton.tonalIcon(
+              onPressed: _selecionarData,
+              icon: const Icon(Icons.event_outlined),
+              label: Text(
+                'Entrega ${_data.day.toString().padLeft(2, '0')}/${_data.month.toString().padLeft(2, '0')}/${_data.year}',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _descricaoController,
+              maxLines: 3,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Descricao (opcional)',
+                prefixIcon: Icon(Icons.notes_rounded),
+              ),
+            ),
+            const SizedBox(height: 14),
+            ColorPickerRow(
+              selectedHex: _corHex,
+              onChanged: (value) => setState(() => _corHex = value),
+            ),
+            const SizedBox(height: 22),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancelar'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _salvar,
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('Salvar'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String? _requiredValidator(String? value) {
+    return value == null || value.trim().isEmpty ? 'Campo obrigatorio' : null;
+  }
+}
+
 class RoomEditSheet extends StatefulWidget {
   const RoomEditSheet({required this.aula, super.key});
 
@@ -1481,8 +3604,8 @@ class _RoomEditSheetState extends State<RoomEditSheet> {
           const SizedBox(height: 8),
           Text(
             widget.aula.disciplina,
-            style: const TextStyle(
-              color: Color(0xFF526070),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1557,6 +3680,7 @@ class SheetShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.viewInsetsOf(context).bottom;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: EdgeInsets.only(bottom: bottomPadding),
       child: Container(
@@ -1564,13 +3688,15 @@ class SheetShell extends StatelessWidget {
           maxHeight: MediaQuery.sizeOf(context).height * 0.90,
         ),
         padding: const EdgeInsets.fromLTRB(22, 18, 22, 22),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: <Color>[Color(0xFFF8FAFC), Color(0xFFEAF8F8)],
+            colors: isDark
+                ? const <Color>[Color(0xFF102234), Color(0xFF0B1625)]
+                : const <Color>[Color(0xFFF8FAFC), Color(0xFFEAF8F8)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
         ),
         child: SingleChildScrollView(
           child: Column(
@@ -1580,7 +3706,9 @@ class SheetShell extends StatelessWidget {
                 width: 46,
                 height: 5,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFD6DCE8),
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.24)
+                      : const Color(0xFFD6DCE8),
                   borderRadius: BorderRadius.circular(999),
                 ),
               ),

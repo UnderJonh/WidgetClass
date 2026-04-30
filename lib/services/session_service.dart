@@ -5,6 +5,10 @@ enum AppRole { aluno, staff, admin }
 extension AppRoleX on AppRole {
   bool get canManageClasses => this == AppRole.admin;
 
+  bool get canManageActivities => this == AppRole.admin;
+
+  bool get canManageCalendar => this == AppRole.admin;
+
   bool get canEditRooms => this == AppRole.admin || this == AppRole.staff;
 
   String get label {

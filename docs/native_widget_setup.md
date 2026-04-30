@@ -5,8 +5,14 @@
 Os arquivos Android ja foram adicionados neste projeto:
 
 - `android/app/src/main/kotlin/com/example/widget_class/ClassScheduleWidgetProvider.kt`
+- `android/app/src/main/kotlin/com/example/widget_class/ActivitiesWidgetProvider.kt`
+- `android/app/src/main/kotlin/com/example/widget_class/WidgetBackgroundSync.kt`
+- `android/app/src/main/kotlin/com/example/widget_class/WidgetRefreshReceiver.kt`
+- `android/app/src/main/kotlin/com/example/widget_class/WidgetRefreshScheduler.kt`
 - `android/app/src/main/res/layout/class_schedule_widget.xml`
+- `android/app/src/main/res/layout/activities_widget.xml`
 - `android/app/src/main/res/xml/class_schedule_widget_info.xml`
+- `android/app/src/main/res/xml/activities_widget_info.xml`
 - `android/app/src/main/res/drawable/class_widget_background.xml`
 - `android/app/src/main/res/drawable/class_widget_chip_background.xml`
 
@@ -40,6 +46,21 @@ O provider nativo le as chaves salvas pelo Flutter:
 - `current_disciplina`
 - `current_professor`
 - `current_sala`
+- `current_horario`
+- `current_icone`
+- `current_cor_hex`
+- `work_title`
+- `work_subject`
+- `work_date`
+- `eval_title`
+- `eval_subject`
+- `eval_date`
+- `selected_turma_id`
+
+O Android tambem agenda uma atualizacao em background a cada 15 minutos usando
+`AlarmManager`. O receiver busca Supabase direto pelo REST, recalcula a aula
+visivel por ate 30 minutos depois do inicio e redesenha os widgets sem abrir o
+app.
 
 ## iOS
 

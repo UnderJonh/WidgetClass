@@ -16,7 +16,7 @@ import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetProvider
 import kotlin.math.roundToInt
 
-class ClassScheduleWidgetProvider : HomeWidgetProvider() {
+class ActivitiesWidgetProvider : HomeWidgetProvider() {
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
         WidgetRefreshScheduler.schedule(context)
@@ -40,7 +40,7 @@ class ClassScheduleWidgetProvider : HomeWidgetProvider() {
         fun updateAll(context: Context, widgetData: SharedPreferences) {
             val appWidgetManager = AppWidgetManager.getInstance(context)
             val ids = appWidgetManager.getAppWidgetIds(
-                ComponentName(context, ClassScheduleWidgetProvider::class.java),
+                ComponentName(context, ActivitiesWidgetProvider::class.java),
             )
             ids.forEach { widgetId ->
                 appWidgetManager.updateAppWidget(widgetId, buildRemoteViews(context, widgetData))
@@ -51,35 +51,36 @@ class ClassScheduleWidgetProvider : HomeWidgetProvider() {
             context: Context,
             widgetData: SharedPreferences,
         ): RemoteViews {
-            val disciplina = widgetData.getString(
-                "current_disciplina",
-                "Sem aula restante",
-            ) ?: "Sem aula restante"
-            val professor = widgetData.getString(
-                "current_professor",
-                "Nenhum professor",
-            ) ?: "Nenhum professor"
-            val sala = widgetData.getString("current_sala", "Sem sala") ?: "Sem sala"
-            val horario = widgetData.getString("current_horario", "--:--") ?: "--:--"
-            val icone = widgetData.getString("current_icone", "📘") ?: "📘"
-            val color = parseColor(widgetData.getString("current_cor_hex", "#1B9AAA"))
+            val workTitle = widgetData.getString("work_title", "Sem trabalhos")
+                ?: "Sem trabalhos"
+            val workSubject = widgetData.getString("work_subject", "Agenda livre")
+                ?: "Agenda livre"
+            val workDate = widgetData.getString("work_date", "--") ?: "--"
+            val evalTitle = widgetData.getString("eval_title", "Sem avaliacoes")
+                ?: "Sem avaliacoes"
+            val evalSubject = widgetData.getString("eval_subject", "Agenda livre")
+                ?: "Agenda livre"
+            val evalDate = widgetData.getString("eval_date", "--") ?: "--"
+            val workColor = parseColor(widgetData.getString("work_color_hex", "#1B9AAA"))
+            val evalColor = parseColor(widgetData.getString("eval_color_hex", "#5B7CFA"))
 
-            return RemoteViews(context.packageName, R.layout.class_schedule_widget).apply {
+            return RemoteViews(context.packageName, R.layout.activities_widget).apply {
                 setImageViewBitmap(
-                    R.id.widget_background_image,
-                    createCardBackground(color),
+                    R.id.activities_widget_background,
+                    createBackground(workColor, evalColor),
                 )
-                setTextViewText(R.id.widget_disciplina, disciplina)
-                setTextViewText(R.id.widget_professor, professor)
-                setTextViewText(R.id.widget_sala, sala)
-                setTextViewText(R.id.widget_horario, horario)
-                setTextViewText(R.id.widget_icone, icone)
+                setTextViewText(R.id.widget_work_title, workTitle)
+                setTextViewText(R.id.widget_work_subject, workSubject)
+                setTextViewText(R.id.widget_work_date, workDate)
+                setTextViewText(R.id.widget_eval_title, evalTitle)
+                setTextViewText(R.id.widget_eval_subject, evalSubject)
+                setTextViewText(R.id.widget_eval_date, evalDate)
 
                 val pendingIntent = HomeWidgetLaunchIntent.getActivity(
                     context,
                     MainActivity::class.java,
                 )
-                setOnClickPendingIntent(R.id.widget_root, pendingIntent)
+                setOnClickPendingIntent(R.id.activities_widget_root, pendingIntent)
             }
         }
 
@@ -91,12 +92,10 @@ class ClassScheduleWidgetProvider : HomeWidgetProvider() {
             }
         }
 
-        private fun createCardBackground(startColor: Int): Bitmap {
-            val width = 900
+        private fun createBackground(startColor: Int, endColor: Int): Bitmap {
+            val width = 980
             val height = 430
             val radius = 58f
-            val readableStart = blendWithBlack(startColor, 0.20f)
-            val readableEnd = blendWithBlack(blendWithWhite(startColor, 0.18f), 0.12f)
             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
             val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -105,12 +104,11 @@ class ClassScheduleWidgetProvider : HomeWidgetProvider() {
                     0f,
                     width.toFloat(),
                     height.toFloat(),
-                    readableStart,
-                    readableEnd,
+                    blendWithBlack(blendWithWhite(startColor, 0.08f), 0.12f),
+                    blendWithBlack(blendWithWhite(endColor, 0.10f), 0.10f),
                     Shader.TileMode.CLAMP,
                 )
             }
-
             canvas.drawRoundRect(
                 RectF(0f, 0f, width.toFloat(), height.toFloat()),
                 radius,

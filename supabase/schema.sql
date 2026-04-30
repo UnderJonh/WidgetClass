@@ -58,6 +58,44 @@ alter table public.aulas alter column sala set default 'F104';
 create unique index if not exists aulas_turma_disciplina_dia_inicio_key
 on public.aulas (turma_id, disciplina, dia_semana, horario_inicio);
 
+create table if not exists public.atividades (
+  id uuid primary key default gen_random_uuid(),
+  turma_id text not null default 'eletronica_3a' references public.turmas(id),
+  materia text not null,
+  titulo text not null,
+  tipo text not null check (tipo in ('trabalho', 'avaliacao')),
+  data_entrega date not null,
+  descricao text,
+  cor_hex text not null default '#1B9AAA',
+  created_at timestamptz not null default now()
+);
+
+alter table public.atividades add column if not exists turma_id text not null default 'eletronica_3a' references public.turmas(id);
+alter table public.atividades add column if not exists materia text not null default 'Materia';
+alter table public.atividades add column if not exists titulo text not null default 'Atividade';
+alter table public.atividades add column if not exists tipo text not null default 'trabalho';
+alter table public.atividades add column if not exists data_entrega date not null default current_date;
+alter table public.atividades add column if not exists descricao text;
+alter table public.atividades add column if not exists cor_hex text not null default '#1B9AAA';
+alter table public.atividades add column if not exists created_at timestamptz not null default now();
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'atividades_tipo_check'
+  ) then
+    alter table public.atividades
+      add constraint atividades_tipo_check
+      check (tipo in ('trabalho', 'avaliacao'));
+  end if;
+end;
+$$;
+
+create unique index if not exists atividades_turma_tipo_titulo_data_key
+on public.atividades (turma_id, tipo, titulo, data_entrega);
+
 create or replace function public.current_user_role()
 returns text
 language sql
@@ -133,6 +171,7 @@ execute function public.guard_staff_aula_update();
 
 alter table public.turmas enable row level security;
 alter table public.aulas enable row level security;
+alter table public.atividades enable row level security;
 alter table public.usuarios_roles enable row level security;
 
 drop policy if exists "Leitura publica de turmas" on public.turmas;
@@ -166,6 +205,31 @@ on public.aulas
 for delete
 using (public.is_admin());
 
+drop policy if exists "Leitura publica de atividades" on public.atividades;
+create policy "Leitura publica de atividades"
+on public.atividades
+for select
+using (true);
+
+drop policy if exists "Admin cadastra atividades" on public.atividades;
+create policy "Admin cadastra atividades"
+on public.atividades
+for insert
+with check (public.is_admin());
+
+drop policy if exists "Admin atualiza atividades" on public.atividades;
+create policy "Admin atualiza atividades"
+on public.atividades
+for update
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "Admin exclui atividades" on public.atividades;
+create policy "Admin exclui atividades"
+on public.atividades
+for delete
+using (public.is_admin());
+
 drop policy if exists "Usuario ve proprio role ou admin ve todos" on public.usuarios_roles;
 create policy "Usuario ve proprio role ou admin ve todos"
 on public.usuarios_roles
@@ -178,6 +242,11 @@ on public.usuarios_roles
 for all
 using (public.is_admin())
 with check (public.is_admin());
+
+-- Limpa somente dados de agenda/aulas. Nao toca em auth.users,
+-- public.profiles nem public.usuarios_roles.
+delete from public.atividades where turma_id = 'eletronica_3a';
+delete from public.aulas where turma_id = 'eletronica_3a';
 
 insert into public.aulas (
   turma_id,
@@ -192,22 +261,21 @@ insert into public.aulas (
   imagem_url
 ) values
   ('eletronica_3a', 'Mecanica Naval', 'Igor Casciano', 'F104', 1, '07:00', '08:40', '⚙️', '#F15BB5', null),
-  ('eletronica_3a', 'Sist. de Tele.', 'Tiago Tadeu', 'F104', 1, '09:00', '10:40', '📡', '#F15BB5', null),
-  ('eletronica_3a', 'Fisica', 'Christiano Leal', 'F104', 1, '10:40', '12:20', '⚛️', '#FFF56D', null),
-  ('eletronica_3a', 'HP', 'Igor Casciano', 'F104', 2, '07:00', '08:40', '🛠️', '#F15BB5', null),
-  ('eletronica_3a', 'Automacao e Controle', 'Alcemir Gama', 'F104', 2, '09:00', '12:20', '🤖', '#B9DDF4', null),
-  ('eletronica_3a', 'Matematica', 'Ladeisa Moreira', 'F104', 2, '14:10', '15:50', '➗', '#F15BB5', null),
+  ('eletronica_3a', 'Sist. de Tele.', 'Tiago Tadeu', 'F104', 1, '09:00', '10:40', '📡', '#5B7CFA', null),
+  ('eletronica_3a', 'Fisica', 'Christiano Leal', 'F104', 1, '10:40', '12:20', '⚛️', '#FFB703', null),
+  ('eletronica_3a', 'HP', 'Igor Casciano', 'F104', 2, '07:00', '08:40', '🛠️', '#FF4D6D', null),
+  ('eletronica_3a', 'Automacao e Controle', 'Alcemir Gama', 'F104', 2, '09:00', '12:20', '🤖', '#1B9AAA', null),
+  ('eletronica_3a', 'Matematica', 'Larissa Moreira', 'F104', 2, '14:10', '15:50', '➗', '#7C3AED', null),
   ('eletronica_3a', 'Projeto ENEM - Redacao', 'Elaine Junger', 'F104', 2, '16:10', '17:50', '✍️', '#00D7DF', null),
-  ('eletronica_3a', 'Ingles', 'Leticia Beutzer', 'F104', 3, '07:00', '08:40', '🌎', '#D2B900', null),
-  ('eletronica_3a', 'Microcontroladores e Microprocessadores', 'Leonardo Francisco', 'F104', 3, '09:00', '10:40', '🔌', '#B9DDF4', null),
+  ('eletronica_3a', 'Ingles', 'Leticia Baltazar', 'F104', 3, '07:00', '08:40', '🌎', '#D2B900', null),
+  ('eletronica_3a', 'Microcontroladores e Microprocessadores', 'Leonardo Francisco', 'F104', 3, '09:00', '10:40', '🔌', '#1B9AAA', null),
   ('eletronica_3a', 'Redes de Computadores', 'Thiago Nunes', 'F104', 3, '10:40', '12:20', '🌐', '#A78BFA', null),
-  ('eletronica_3a', 'Portugues', 'Elaine Junger', 'F104', 4, '07:00', '08:40', '📚', '#00D7DF', null),
+  ('eletronica_3a', 'Portugues', 'Elaine Junger', 'F104', 4, '07:00', '08:40', '📚', '#00B894', null),
   ('eletronica_3a', 'Eletronica Analogica II', 'Luiz Mauricio Lopes', 'F104', 4, '09:00', '10:40', '🧲', '#FBFF3E', null),
-  ('eletronica_3a', 'Portugues', 'Elaine Junger', 'F104', 4, '10:40', '12:20', '📚', '#00D7DF', null),
-  ('eletronica_3a', 'Dependencia em Quimica', 'Profa. Poliana', 'F104', 4, '14:10', '15:50', '🧪', '#FDBA74', null),
-  ('eletronica_3a', 'Educacao Fisica', 'Pedro Sarmat', 'F104', 5, '07:00', '08:40', '🏃', '#CFE7F8', null),
+  ('eletronica_3a', 'Portugues', 'Elaine Junger', 'F104', 4, '10:40', '12:20', '📚', '#00B894', null),
+  ('eletronica_3a', 'Educacao Fisica', 'Pedro Sarmet', 'F104', 5, '07:00', '08:40', '🏃', '#CFE7F8', null),
   ('eletronica_3a', 'Sociologia', 'Andreia Abad', 'F104', 5, '09:00', '10:40', '👥', '#C084FC', null),
-  ('eletronica_3a', 'Organizacao e Normas', 'William Itabo', 'F104', 5, '10:40', '12:20', '📋', '#A7C7FF', null)
+  ('eletronica_3a', 'Organizacao e Normas', 'William Intacio', 'F104', 5, '10:40', '12:20', '📋', '#A7C7FF', null)
 on conflict (turma_id, disciplina, dia_semana, horario_inicio) do update set
   professor = excluded.professor,
   sala = excluded.sala,
@@ -215,3 +283,22 @@ on conflict (turma_id, disciplina, dia_semana, horario_inicio) do update set
   icone = excluded.icone,
   cor_hex = excluded.cor_hex,
   imagem_url = excluded.imagem_url;
+
+insert into public.atividades (
+  turma_id,
+  materia,
+  titulo,
+  tipo,
+  data_entrega,
+  descricao,
+  cor_hex
+) values
+  ('eletronica_3a', 'MCMP', 'Trabalho de MCMP', 'trabalho', '2027-03-12', 'Entrega do trabalho principal de microcontroladores.', '#1B9AAA'),
+  ('eletronica_3a', 'Ingles', 'Avaliacao de Ingles', 'avaliacao', '2026-07-10', 'Avaliacao bimestral.', '#5B7CFA'),
+  ('eletronica_3a', 'Redes de Computadores', 'Relatorio de Redes', 'trabalho', '2026-05-18', 'Relatorio da pratica de redes.', '#A78BFA'),
+  ('eletronica_3a', 'Matematica', 'Lista de Matematica', 'trabalho', '2026-05-22', 'Lista de exercicios.', '#7C3AED'),
+  ('eletronica_3a', 'Fisica', 'Avaliacao de Fisica', 'avaliacao', '2026-06-03', 'Conteudo do trimestre.', '#FFB703')
+on conflict (turma_id, tipo, titulo, data_entrega) do update set
+  materia = excluded.materia,
+  descricao = excluded.descricao,
+  cor_hex = excluded.cor_hex;
