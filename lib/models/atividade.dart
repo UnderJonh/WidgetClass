@@ -1,6 +1,7 @@
 import 'aula.dart';
 
 enum TipoAtividade {
+  atividade('atividade', 'Atividade'),
   trabalho('trabalho', 'Trabalho'),
   avaliacao('avaliacao', 'Avaliacao');
 
@@ -11,8 +12,10 @@ enum TipoAtividade {
 
   static TipoAtividade fromDatabase(String? value) {
     return switch (value) {
+      'atividade' => TipoAtividade.atividade,
+      'trabalho' => TipoAtividade.trabalho,
       'avaliacao' => TipoAtividade.avaliacao,
-      _ => TipoAtividade.trabalho,
+      _ => TipoAtividade.atividade,
     };
   }
 }

@@ -152,37 +152,45 @@ class _SplashGateState extends State<SplashGate>
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: <Widget>[
-                          Text(
-                            'WidgetClass',
-                            textAlign: TextAlign.center,
+                          _SplashTextLine(
+                            controller: _controller,
+                            begin: 0.10,
+                            end: 0.70,
+                            text: 'WidgetClass',
                             style: Theme.of(context).textTheme.displaySmall
                                 ?.copyWith(
                                   fontWeight: FontWeight.w900,
-                                  letterSpacing: 0.2,
+                                  letterSpacing: 0,
                                 ),
                           ),
                           const SizedBox(height: 8),
-                          Text(
-                            'Sua rotina no ponto',
-                            textAlign: TextAlign.center,
+                          _SplashTextLine(
+                            controller: _controller,
+                            begin: 0.24,
+                            end: 0.82,
+                            text: 'Sua rotina no ponto',
                             style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(
                                   color: Theme.of(
                                     context,
                                   ).colorScheme.onSurfaceVariant,
                                   fontWeight: FontWeight.w700,
+                                  letterSpacing: 0,
                                 ),
                           ),
                           const SizedBox(height: 6),
-                          Text(
-                            '(1.4v)',
-                            textAlign: TextAlign.center,
+                          _SplashTextLine(
+                            controller: _controller,
+                            begin: 0.38,
+                            end: 0.92,
+                            text: '(26.4.3v)',
                             style: Theme.of(context).textTheme.labelMedium
                                 ?.copyWith(
                                   color: Theme.of(
                                     context,
                                   ).colorScheme.onSurfaceVariant,
                                   fontWeight: FontWeight.w600,
+                                  letterSpacing: 0,
                                 ),
                           ),
                         ],
@@ -195,6 +203,43 @@ class _SplashGateState extends State<SplashGate>
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SplashTextLine extends StatelessWidget {
+  const _SplashTextLine({
+    required this.controller,
+    required this.begin,
+    required this.end,
+    required this.text,
+    required this.style,
+  });
+
+  final Animation<double> controller;
+  final double begin;
+  final double end;
+  final String text;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      child: Text(text, textAlign: TextAlign.center, style: style),
+      builder: (context, child) {
+        final normalized = ((controller.value - begin) / (end - begin))
+            .clamp(0.0, 1.0)
+            .toDouble();
+        final value = Curves.easeOutCubic.transform(normalized);
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, 12 * (1 - value)),
+            child: Transform.scale(scale: 0.96 + 0.04 * value, child: child),
+          ),
+        );
+      },
     );
   }
 }
@@ -259,65 +304,6 @@ ThemeData _buildAppTheme(Brightness brightness) {
       ),
     ),
   );
-}
-
-class WidgetClassLogoMark extends StatelessWidget {
-  const WidgetClassLogoMark({this.size = 46, super.key});
-
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    final gap = size * 0.09;
-    final padding = size * 0.14;
-    final tile = (size - padding * 2 - gap) / 2;
-    return Container(
-      width: size,
-      height: size,
-      padding: EdgeInsets.all(padding),
-      decoration: BoxDecoration(
-        color: const Color(0xFF111827),
-        borderRadius: BorderRadius.circular(size * 0.24),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: const Color(0xFF1B9AAA).withValues(alpha: 0.24),
-            blurRadius: size * 0.28,
-            offset: Offset(0, size * 0.10),
-          ),
-        ],
-      ),
-      child: Wrap(
-        spacing: gap,
-        runSpacing: gap,
-        children: <Widget>[
-          _LogoTile(size: tile, color: const Color(0xFF1B9AAA)),
-          _LogoTile(size: tile, color: const Color(0xFF5B7CFA)),
-          _LogoTile(size: tile, color: const Color(0xFFFFB703)),
-          _LogoTile(size: tile, color: const Color(0xFF00B894)),
-        ],
-      ),
-    );
-  }
-}
-
-class _LogoTile extends StatelessWidget {
-  const _LogoTile({required this.size, required this.color});
-
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 280),
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(size * 0.28),
-      ),
-    );
-  }
 }
 
 class ScheduleHomePage extends StatefulWidget {
@@ -482,7 +468,7 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
 
   Future<void> _salvarAula({Aula? aula, int? diaSemanaInicial}) async {
     if (!_role.canManageClasses) {
-      _mostrarMensagem('Somente administradores podem editar o card completo.');
+      _mostrarMensagem('Somente administradores podem editar a aula completa.');
       return;
     }
 
@@ -699,16 +685,22 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
     return message;
   }
 
+  int get _activeTab => _selectedTab == 1 ? 1 : 0;
+
   String get _tabTitle {
-    return switch (_selectedTab) {
-      1 => 'Atividades',
-      2 => 'Calendario',
+    return switch (_activeTab) {
+      1 => 'Agenda',
       _ => 'WidgetClass',
     };
   }
 
   Widget _buildAulasPage() {
-    final grupos = agruparAulasPorMateria(_aulas);
+    final aulasOrdenadas = [..._aulas]
+      ..sort((a, b) {
+        final dayCompare = a.diaSemana.compareTo(b.diaSemana);
+        if (dayCompare != 0) return dayCompare;
+        return a.horarioInicio.compareTo(b.horarioInicio);
+      });
     final children = <Widget>[
       StaggeredEntry(
         index: 0,
@@ -726,8 +718,8 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
       StaggeredEntry(
         index: 2,
         child: SectionHeader(
-          title: 'Aulas por materia',
-          count: grupos.length,
+          title: 'Aulas da turma',
+          count: aulasOrdenadas.length,
           subtitle: _turmaSelecionada.nome,
         ),
       ),
@@ -743,18 +735,18 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
     } else if (_aulas.isEmpty) {
       children.add(EmptySchedule(turma: _turmaSelecionada));
     } else {
-      for (var index = 0; index < grupos.length; index++) {
-        final grupo = grupos[index];
+      for (var index = 0; index < aulasOrdenadas.length; index++) {
+        final aula = aulasOrdenadas[index];
         children.add(
           StaggeredEntry(
             index: index + 3,
-            child: AulaGrupoCard(
-              grupo: grupo,
+            child: AulaCard(
+              aula: aula,
               canManage: _role.canManageClasses,
               canEditRoom: _role.canEditRooms,
-              onEditCard: (aula) => _salvarAula(aula: aula),
-              onEditRoom: _editarSala,
-              onDelete: _excluirAula,
+              onEditCard: () => _salvarAula(aula: aula),
+              onEditRoom: () => _editarSala(aula),
+              onDelete: () => _excluirAula(aula),
             ),
           ),
         );
@@ -765,6 +757,10 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
   }
 
   Widget _buildAtividadesPage() {
+    final atividadesComuns = proximasAtividades(
+      _atividades,
+      tipo: TipoAtividade.atividade,
+    );
     final trabalhos = proximasAtividades(
       _atividades,
       tipo: TipoAtividade.trabalho,
@@ -783,9 +779,11 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
             onTap: _selecionarTurma,
           ),
         ),
+        const SizedBox(height: 16),
         StaggeredEntry(
           index: 1,
           child: AgendaSummaryPanel(
+            atividades: atividadesComuns,
             trabalhos: trabalhos,
             avaliacoes: avaliacoes,
           ),
@@ -794,9 +792,9 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
         StaggeredEntry(
           index: 2,
           child: SectionHeader(
-            title: 'Agenda da turma',
+            title: 'Agenda e calendario',
             count: _atividades.length,
-            subtitle: 'Trabalhos e avaliacoes',
+            subtitle: 'Entregas marcadas no calendario',
           ),
         ),
         if (_erro != null) ...<Widget>[
@@ -804,13 +802,48 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
           ErrorBanner(message: _erro!),
         ],
         const SizedBox(height: 14),
+        StaggeredEntry(
+          index: 3,
+          child: CalendarPanel(
+            atividades: _atividades,
+            canManage: _role.canManageCalendar,
+            onEditAtividade: (atividade) =>
+                _salvarAtividade(atividade: atividade),
+            onDeleteAtividade: _excluirAtividade,
+            onAddAtividade: (day) => _salvarAtividade(dataInicial: day),
+          ),
+        ),
+        const SizedBox(height: 22),
+        StaggeredEntry(
+          index: 4,
+          child: SectionHeader(
+            title: 'Proximas atividades',
+            count: _atividades.length,
+            subtitle: 'Atividades, trabalhos e avaliacoes',
+          ),
+        ),
+        const SizedBox(height: 14),
         if (_carregando && _atividades.isEmpty)
           const LoadingSchedule()
         else if (_atividades.isEmpty)
           const EmptyActivities()
         else ...<Widget>[
           StaggeredEntry(
-            index: 3,
+            index: 5,
+            child: ActivitySection(
+              title: 'Atividades',
+              icon: Icons.event_note_outlined,
+              atividades: atividadesComuns,
+              canManage: _role.canManageActivities,
+              onCreate: () =>
+                  _salvarAtividade(tipoInicial: TipoAtividade.atividade),
+              onEdit: (atividade) => _salvarAtividade(atividade: atividade),
+              onDelete: _excluirAtividade,
+            ),
+          ),
+          const SizedBox(height: 16),
+          StaggeredEntry(
+            index: 6,
             child: ActivitySection(
               title: 'Proximos trabalhos',
               icon: Icons.assignment_outlined,
@@ -824,7 +857,7 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
           ),
           const SizedBox(height: 16),
           StaggeredEntry(
-            index: 4,
+            index: 7,
             child: ActivitySection(
               title: 'Proximas avaliacoes',
               icon: Icons.fact_check_outlined,
@@ -841,40 +874,9 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
     );
   }
 
-  Widget _buildCalendarioPage() {
-    return _PageList(
-      children: <Widget>[
-        StaggeredEntry(
-          index: 0,
-          child: ClassSelectorCard(
-            turma: _turmaSelecionada,
-            onTap: _selecionarTurma,
-          ),
-        ),
-        const SizedBox(height: 16),
-        StaggeredEntry(
-          index: 1,
-          child: CalendarPanel(
-            aulas: _aulas,
-            atividades: _atividades,
-            canManage: _role.canManageCalendar,
-            onEditAula: (aula) => _salvarAula(aula: aula),
-            onDeleteAula: _excluirAula,
-            onAddAula: (day) => _salvarAula(diaSemanaInicial: day.weekday),
-            onEditAtividade: (atividade) =>
-                _salvarAtividade(atividade: atividade),
-            onDeleteAtividade: _excluirAtividade,
-            onAddAtividade: (day) => _salvarAtividade(dataInicial: day),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildSelectedPage() {
-    return switch (_selectedTab) {
+    return switch (_activeTab) {
       1 => _buildAtividadesPage(),
-      2 => _buildCalendarioPage(),
       _ => _buildAulasPage(),
     };
   }
@@ -886,7 +888,7 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
     if (_salvando) {
       return const SizedBox(key: ValueKey<String>('fab_none'));
     }
-    if (_selectedTab == 0 && canAddClasses) {
+    if (_activeTab == 0 && canAddClasses) {
       return FloatingActionButton.extended(
         key: const ValueKey<String>('fab_aulas'),
         onPressed: () => _salvarAula(),
@@ -894,7 +896,7 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
         label: const Text('Nova aula'),
       );
     }
-    if (_selectedTab == 1 && canAddActivities) {
+    if (_activeTab == 1 && canAddActivities) {
       return FloatingActionButton.extended(
         key: const ValueKey<String>('fab_atividades'),
         onPressed: () => _salvarAtividade(),
@@ -940,7 +942,7 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
         ],
       ),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedTab,
+        selectedIndex: _activeTab,
         onDestinationSelected: (value) => setState(() => _selectedTab = value),
         destinations: const <NavigationDestination>[
           NavigationDestination(
@@ -952,11 +954,6 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
             icon: Icon(Icons.assignment_outlined),
             selectedIcon: Icon(Icons.assignment_turned_in_rounded),
             label: 'Agenda',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.calendar_month_outlined),
-            selectedIcon: Icon(Icons.calendar_month_rounded),
-            label: 'Calendario',
           ),
         ],
       ),
@@ -992,7 +989,7 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
                 );
               },
               child: KeyedSubtree(
-                key: ValueKey<int>(_selectedTab),
+                key: ValueKey<int>(_activeTab),
                 child: _buildSelectedPage(),
               ),
             ),
@@ -1372,7 +1369,7 @@ class AulaGrupoCard extends StatelessWidget {
                               PopupMenuItem<String>(
                                 value: 'card|${item.id}',
                                 child: Text(
-                                  'Editar ${item.intervaloFormatado}',
+                                  'Editar aula ${item.intervaloFormatado}',
                                 ),
                               ),
                             if (canEditRoom)
@@ -1473,6 +1470,30 @@ class AppDrawer extends StatelessWidget {
   final VoidCallback? onNewClass;
   final VoidCallback? onNewActivity;
 
+  ThemeMode get _nextThemeMode {
+    return switch (themeMode) {
+      ThemeMode.system => ThemeMode.dark,
+      ThemeMode.dark => ThemeMode.light,
+      ThemeMode.light => ThemeMode.system,
+    };
+  }
+
+  String get _themeModeLabel {
+    return switch (themeMode) {
+      ThemeMode.system => 'Automatico',
+      ThemeMode.dark => 'Escuro',
+      ThemeMode.light => 'Claro',
+    };
+  }
+
+  IconData get _themeModeIcon {
+    return switch (themeMode) {
+      ThemeMode.system => Icons.brightness_auto_outlined,
+      ThemeMode.dark => Icons.dark_mode_outlined,
+      ThemeMode.light => Icons.light_mode_outlined,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final email = user?.email;
@@ -1488,8 +1509,6 @@ class AppDrawer extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  const WidgetClassLogoMark(size: 58),
-                  const SizedBox(height: 16),
                   Text(
                     'WidgetClass',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -1519,29 +1538,13 @@ class AppDrawer extends StatelessWidget {
                     style: TextStyle(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 10),
-                  SegmentedButton<ThemeMode>(
-                    selected: <ThemeMode>{themeMode},
-                    onSelectionChanged: (values) {
-                      if (values.isEmpty) return;
-                      onThemeModeChanged(values.first);
-                    },
-                    segments: const <ButtonSegment<ThemeMode>>[
-                      ButtonSegment<ThemeMode>(
-                        value: ThemeMode.system,
-                        icon: Icon(Icons.brightness_auto_outlined),
-                        label: Text('Auto'),
-                      ),
-                      ButtonSegment<ThemeMode>(
-                        value: ThemeMode.light,
-                        icon: Icon(Icons.light_mode_outlined),
-                        label: Text('Claro'),
-                      ),
-                      ButtonSegment<ThemeMode>(
-                        value: ThemeMode.dark,
-                        icon: Icon(Icons.dark_mode_outlined),
-                        label: Text('Escuro'),
-                      ),
-                    ],
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.tonalIcon(
+                      onPressed: () => onThemeModeChanged(_nextThemeMode),
+                      icon: Icon(_themeModeIcon),
+                      label: Text(_themeModeLabel),
+                    ),
                   ),
                 ],
               ),
@@ -1599,17 +1602,18 @@ class AppDrawer extends StatelessWidget {
                 DrawerActionTile(
                   icon: Icons.add_rounded,
                   title: 'Adicionar aula',
-                  subtitle: 'Criar card na turma',
+                  subtitle: 'Criar aula na turma',
                   onTap: () {
                     Navigator.pop(context);
                     onNewClass?.call();
                   },
                 ),
+              if (role == AppRole.admin) const SizedBox(height: 10),
               if (role == AppRole.admin)
                 DrawerActionTile(
                   icon: Icons.add_task_rounded,
                   title: 'Adicionar atividade',
-                  subtitle: 'Criar item na agenda',
+                  subtitle: 'Criar item no calendario',
                   onTap: () {
                     Navigator.pop(context);
                     onNewActivity?.call();
@@ -1619,7 +1623,7 @@ class AppDrawer extends StatelessWidget {
                 const Padding(
                   padding: EdgeInsets.all(14),
                   child: Text(
-                    'Staff pode alterar apenas a sala dos cards.',
+                    'Staff pode alterar apenas a sala das aulas.',
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
@@ -1876,39 +1880,54 @@ class GlassChip extends StatelessWidget {
 
 class AgendaSummaryPanel extends StatelessWidget {
   const AgendaSummaryPanel({
+    required this.atividades,
     required this.trabalhos,
     required this.avaliacoes,
     super.key,
   });
 
+  final List<Atividade> atividades;
   final List<Atividade> trabalhos;
   final List<Atividade> avaliacoes;
 
   @override
   Widget build(BuildContext context) {
+    final atividade = atividades.isEmpty ? null : atividades.first;
     final trabalho = trabalhos.isEmpty ? null : trabalhos.first;
     final avaliacao = avaliacoes.isEmpty ? null : avaliacoes.first;
 
-    return Row(
+    return Column(
       children: <Widget>[
-        Expanded(
-          child: _AgendaSummaryCard(
-            icon: Icons.assignment_outlined,
-            title: 'Trabalhos',
-            count: trabalhos.length,
-            atividade: trabalho,
-            color: const Color(0xFF1B9AAA),
-          ),
+        _AgendaSummaryCard(
+          icon: Icons.event_note_outlined,
+          title: 'Atividades',
+          count: atividades.length,
+          atividade: atividade,
+          color: activityTypeCalendarColor(TipoAtividade.atividade),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _AgendaSummaryCard(
-            icon: Icons.fact_check_outlined,
-            title: 'Avaliacoes',
-            count: avaliacoes.length,
-            atividade: avaliacao,
-            color: const Color(0xFF5B7CFA),
-          ),
+        const SizedBox(height: 12),
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: _AgendaSummaryCard(
+                icon: Icons.assignment_outlined,
+                title: 'Trabalhos',
+                count: trabalhos.length,
+                atividade: trabalho,
+                color: activityTypeCalendarColor(TipoAtividade.trabalho),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _AgendaSummaryCard(
+                icon: Icons.fact_check_outlined,
+                title: 'Avaliacoes',
+                count: avaliacoes.length,
+                atividade: avaliacao,
+                color: activityTypeCalendarColor(TipoAtividade.avaliacao),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -2132,9 +2151,7 @@ class ActivityCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Icon(
-                  atividade.tipo == TipoAtividade.trabalho
-                      ? Icons.assignment_outlined
-                      : Icons.fact_check_outlined,
+                  activityTypeIcon(atividade.tipo),
                   color: Colors.white,
                 ),
               ),
@@ -2221,6 +2238,10 @@ class ActivityCard extends StatelessWidget {
                           icon: Icons.event_outlined,
                           text: atividade.dataFormatada,
                         ),
+                        GlassChip(
+                          icon: activityTypeIcon(atividade.tipo),
+                          text: atividade.tipo.label,
+                        ),
                       ],
                     ),
                   ],
@@ -2236,24 +2257,16 @@ class ActivityCard extends StatelessWidget {
 
 class CalendarPanel extends StatefulWidget {
   const CalendarPanel({
-    required this.aulas,
     required this.atividades,
     required this.canManage,
-    required this.onEditAula,
-    required this.onDeleteAula,
-    required this.onAddAula,
     required this.onEditAtividade,
     required this.onDeleteAtividade,
     required this.onAddAtividade,
     super.key,
   });
 
-  final List<Aula> aulas;
   final List<Atividade> atividades;
   final bool canManage;
-  final ValueChanged<Aula> onEditAula;
-  final ValueChanged<Aula> onDeleteAula;
-  final ValueChanged<DateTime> onAddAula;
   final ValueChanged<Atividade> onEditAtividade;
   final ValueChanged<Atividade> onDeleteAtividade;
   final ValueChanged<DateTime> onAddAtividade;
@@ -2296,11 +2309,6 @@ class _CalendarPanelState extends State<CalendarPanel> {
       cells.add(null);
     }
 
-    final aulasDoDia =
-        widget.aulas
-            .where((aula) => aula.diaSemana == _selectedDay.weekday)
-            .toList()
-          ..sort((a, b) => a.horarioInicio.compareTo(b.horarioInicio));
     final atividadesDoDia =
         widget.atividades
             .where((atividade) => atividade.aconteceEm(_selectedDay))
@@ -2365,20 +2373,20 @@ class _CalendarPanelState extends State<CalendarPanel> {
             itemBuilder: (context, index) {
               final day = cells[index];
               if (day == null) return const SizedBox.shrink();
-              final hasClass = widget.aulas.any(
-                (aula) => aula.diaSemana == day.weekday,
-              );
-              final hasActivity = widget.atividades.any(
-                (atividade) => atividade.aconteceEm(day),
-              );
+              final activityTypes =
+                  widget.atividades
+                      .where((atividade) => atividade.aconteceEm(day))
+                      .map((atividade) => atividade.tipo)
+                      .toSet()
+                      .toList()
+                    ..sort((a, b) => a.index.compareTo(b.index));
               final selected = _sameDate(day, _selectedDay);
               final today = _sameDate(day, DateTime.now());
               return AnimatedCalendarDay(
                 day: day,
                 selected: selected,
                 today: today,
-                hasClass: hasClass,
-                hasActivity: hasActivity,
+                activityTypes: activityTypes,
                 onTap: () => setState(() => _selectedDay = day),
               );
             },
@@ -2401,40 +2409,25 @@ class _CalendarPanelState extends State<CalendarPanel> {
               ),
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                if (aulasDoDia.isEmpty && atividadesDoDia.isEmpty)
+                if (atividadesDoDia.isEmpty)
                   Text(
-                    'Nada marcado para esse dia.',
+                    'Nenhuma atividade marcada para esse dia.',
                     style: TextStyle(
                       color: onSurfaceVariant,
                       fontWeight: FontWeight.w700,
                     ),
                   )
                 else ...<Widget>[
-                  for (final aula in aulasDoDia)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: _CalendarEventTile(
-                        icon: Icons.school_outlined,
-                        title: aula.disciplina,
-                        subtitle:
-                            '${aula.intervaloFormatado} - sala ${aula.sala}',
-                        canManage: widget.canManage,
-                        color: colorFromHex(aula.corHex),
-                        onEdit: () => widget.onEditAula(aula),
-                        onDelete: () => widget.onDeleteAula(aula),
-                      ),
-                    ),
                   for (final atividade in atividadesDoDia)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: _CalendarEventTile(
-                        icon: atividade.tipo == TipoAtividade.trabalho
-                            ? Icons.assignment_outlined
-                            : Icons.fact_check_outlined,
+                        icon: activityTypeIcon(atividade.tipo),
                         title: atividade.titulo,
-                        subtitle: atividade.materia,
+                        subtitle:
+                            '${atividade.tipo.label} - entrega ${atividade.dataFormatada} - ${atividade.materia}',
                         canManage: widget.canManage,
-                        color: colorFromHex(atividade.corHex),
+                        color: activityTypeCalendarColor(atividade.tipo),
                         onEdit: () => widget.onEditAtividade(atividade),
                         onDelete: () => widget.onDeleteAtividade(atividade),
                       ),
@@ -2445,15 +2438,9 @@ class _CalendarPanelState extends State<CalendarPanel> {
           ),
           if (widget.canManage) ...<Widget>[
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                OutlinedButton.icon(
-                  onPressed: () => widget.onAddAula(_selectedDay),
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text('Nova aula no dia'),
-                ),
                 OutlinedButton.icon(
                   onPressed: () => widget.onAddAtividade(_selectedDay),
                   icon: const Icon(Icons.add_task_rounded),
@@ -2571,8 +2558,7 @@ class AnimatedCalendarDay extends StatelessWidget {
     required this.day,
     required this.selected,
     required this.today,
-    required this.hasClass,
-    required this.hasActivity,
+    required this.activityTypes,
     required this.onTap,
     super.key,
   });
@@ -2580,8 +2566,7 @@ class AnimatedCalendarDay extends StatelessWidget {
   final DateTime day;
   final bool selected;
   final bool today;
-  final bool hasClass;
-  final bool hasActivity;
+  final List<TipoAtividade> activityTypes;
   final VoidCallback onTap;
 
   @override
@@ -2598,44 +2583,59 @@ class AnimatedCalendarDay extends StatelessWidget {
               ? Colors.white.withValues(alpha: 0.10)
               : Colors.white.withValues(alpha: 0.54));
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(18),
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(selected ? 18 : 14),
-          border: Border.all(
-            color: selected
-                ? const Color(0xFF1B9AAA)
-                : Colors.white.withValues(alpha: 0.8),
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: Duration(milliseconds: 180 + day.day * 8),
+      curve: Curves.easeOutBack,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value.clamp(0.0, 1.0).toDouble(),
+          child: Transform.scale(scale: 0.88 + 0.12 * value, child: child),
+        );
+      },
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(selected ? 18 : 14),
+            border: Border.all(
+              color: selected
+                  ? const Color(0xFF1B9AAA)
+                  : Colors.white.withValues(alpha: 0.8),
+            ),
           ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Text(
-              '${day.day}',
-              style: TextStyle(
-                color: selected ? Colors.white : onSurface,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                _CalendarDot(active: hasClass, color: const Color(0xFF5B7CFA)),
-                const SizedBox(width: 3),
-                _CalendarDot(
-                  active: hasActivity,
-                  color: const Color(0xFFFF4D6D),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Text(
+                '${day.day}',
+                style: TextStyle(
+                  color: selected ? Colors.white : onSurface,
+                  fontWeight: FontWeight.w900,
                 ),
-              ],
-            ),
-          ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  for (
+                    var index = 0;
+                    index < activityTypes.length;
+                    index++
+                  ) ...[
+                    if (index > 0) const SizedBox(width: 3),
+                    _CalendarDot(
+                      color: activityTypeCalendarColor(activityTypes[index]),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2643,21 +2643,17 @@ class AnimatedCalendarDay extends StatelessWidget {
 }
 
 class _CalendarDot extends StatelessWidget {
-  const _CalendarDot({required this.active, required this.color});
+  const _CalendarDot({required this.color});
 
-  final bool active;
   final Color color;
 
   @override
   Widget build(BuildContext context) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
-      width: active ? 6 : 3,
-      height: active ? 6 : 3,
-      decoration: BoxDecoration(
-        color: active ? color : Colors.transparent,
-        shape: BoxShape.circle,
-      ),
+      width: 6,
+      height: 6,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
   }
 }
@@ -2675,7 +2671,7 @@ class EmptyActivities extends StatelessWidget {
           SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Nenhum trabalho ou avaliacao cadastrado.',
+              'Nenhuma atividade, trabalho ou avaliacao cadastrada.',
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
           ),
@@ -2895,7 +2891,7 @@ class AulaCard extends StatelessWidget {
                       if (canManage)
                         const PopupMenuItem<String>(
                           value: 'card',
-                          child: Text('Editar card'),
+                          child: Text('Editar aula'),
                         ),
                       if (canEditRoom)
                         const PopupMenuItem<String>(
@@ -3202,7 +3198,7 @@ class _AulaFormSheetState extends State<AulaFormSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              widget.aula == null ? 'Nova aula' : 'Editar card',
+              widget.aula == null ? 'Nova aula' : 'Editar aula',
               style: Theme.of(
                 context,
               ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
@@ -3367,25 +3363,30 @@ class AtividadeFormSheet extends StatefulWidget {
 
 class _AtividadeFormSheetState extends State<AtividadeFormSheet> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _materiaController;
+  final AulaService _aulaService = AulaService();
   late final TextEditingController _tituloController;
   late final TextEditingController _descricaoController;
   late String _turmaId;
+  String? _materia;
   late TipoAtividade _tipo;
   late DateTime _data;
   late String _corHex;
+  List<String> _materiasDisponiveis = <String>[];
+  bool _carregandoMaterias = false;
 
   @override
   void initState() {
     super.initState();
     final atividade = widget.atividade;
-    _materiaController = TextEditingController(text: atividade?.materia ?? '');
+    _materia = atividade?.materia.trim().isEmpty == true
+        ? null
+        : atividade?.materia.trim();
     _tituloController = TextEditingController(text: atividade?.titulo ?? '');
     _descricaoController = TextEditingController(
       text: atividade?.descricao ?? '',
     );
     _turmaId = atividade?.turmaId ?? widget.turmaInicial.id;
-    _tipo = atividade?.tipo ?? widget.tipoInicial ?? TipoAtividade.trabalho;
+    _tipo = atividade?.tipo ?? widget.tipoInicial ?? TipoAtividade.atividade;
     _data =
         atividade?.data ??
         DateTime(
@@ -3394,14 +3395,58 @@ class _AtividadeFormSheetState extends State<AtividadeFormSheet> {
           (widget.dataInicial ?? DateTime.now()).day,
         );
     _corHex = atividade?.corHex ?? '#1B9AAA';
+    _carregarMateriasDaTurma();
   }
 
   @override
   void dispose() {
-    _materiaController.dispose();
     _tituloController.dispose();
     _descricaoController.dispose();
     super.dispose();
+  }
+
+  Future<void> _carregarMateriasDaTurma() async {
+    final turmaId = _turmaId;
+    setState(() => _carregandoMaterias = true);
+
+    try {
+      final aulas = await _aulaService.listarAulas(turmaId: turmaId);
+      final materias =
+          aulas
+              .map((aula) => aula.disciplina.trim())
+              .where((materia) => materia.isNotEmpty)
+              .toSet()
+              .toList()
+            ..sort();
+
+      if (!mounted || turmaId != _turmaId) return;
+      setState(() {
+        _materiasDisponiveis = materias;
+        if (_materia != null && !materias.contains(_materia)) {
+          _materia = null;
+        }
+        if (_materia == null && materias.length == 1) {
+          _materia = materias.first;
+        }
+      });
+    } catch (_) {
+      if (!mounted || turmaId != _turmaId) return;
+      setState(() => _materiasDisponiveis = <String>[]);
+    } finally {
+      if (mounted && turmaId == _turmaId) {
+        setState(() => _carregandoMaterias = false);
+      }
+    }
+  }
+
+  void _alterarTurma(String turmaId) {
+    if (turmaId == _turmaId) return;
+    setState(() {
+      _turmaId = turmaId;
+      _materia = null;
+      _materiasDisponiveis = <String>[];
+    });
+    _carregarMateriasDaTurma();
   }
 
   Future<void> _selecionarData() async {
@@ -3428,7 +3473,7 @@ class _AtividadeFormSheetState extends State<AtividadeFormSheet> {
       Atividade(
         id: widget.atividade?.id,
         turmaId: _turmaId,
-        materia: _materiaController.text,
+        materia: _materia ?? '',
         titulo: _tituloController.text,
         tipo: _tipo,
         data: _data,
@@ -3469,7 +3514,7 @@ class _AtividadeFormSheetState extends State<AtividadeFormSheet> {
                   )
                   .toList(),
               onChanged: (value) {
-                if (value != null) setState(() => _turmaId = value);
+                if (value != null) _alterarTurma(value);
               },
             ),
             const SizedBox(height: 12),
@@ -3492,14 +3537,46 @@ class _AtividadeFormSheetState extends State<AtividadeFormSheet> {
               },
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              controller: _materiaController,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Materia',
-                prefixIcon: Icon(Icons.menu_book_outlined),
+            DropdownButtonFormField<String>(
+              key: ValueKey<String>(
+                'materia-$_turmaId-${_materia ?? ''}-${_materiasDisponiveis.length}',
               ),
-              validator: _requiredValidator,
+              initialValue: _materiasDisponiveis.contains(_materia)
+                  ? _materia
+                  : null,
+              decoration: InputDecoration(
+                labelText: 'Materia',
+                prefixIcon: const Icon(Icons.menu_book_outlined),
+                helperText: _carregandoMaterias
+                    ? 'Carregando materias da turma'
+                    : null,
+              ),
+              hint: Text(
+                _carregandoMaterias
+                    ? 'Carregando'
+                    : _materiasDisponiveis.isEmpty
+                    ? 'Cadastre aulas nessa turma'
+                    : 'Escolha a materia',
+              ),
+              items: _materiasDisponiveis
+                  .map(
+                    (materia) => DropdownMenuItem<String>(
+                      value: materia,
+                      child: Text(materia),
+                    ),
+                  )
+                  .toList(),
+              onChanged: _carregandoMaterias || _materiasDisponiveis.isEmpty
+                  ? null
+                  : (value) => setState(() => _materia = value),
+              validator: (value) {
+                if (_materiasDisponiveis.isEmpty) {
+                  return 'Cadastre aulas para escolher a materia';
+                }
+                return value == null || value.trim().isEmpty
+                    ? 'Escolha uma materia'
+                    : null;
+              },
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -3650,23 +3727,55 @@ class ColorPickerRow extends StatelessWidget {
       spacing: 10,
       runSpacing: 10,
       children: <Widget>[
-        for (final hex in _cardColorHexes)
-          InkWell(
-            borderRadius: BorderRadius.circular(999),
-            onTap: () => onChanged(hex),
-            child: Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: colorFromHex(hex),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: selectedHex == hex ? Colors.black : Colors.white,
-                  width: selectedHex == hex ? 3 : 2,
+        for (final hex in _cardColorHexes) ...[
+          Builder(
+            builder: (context) {
+              final selected = selectedHex == hex;
+              return AnimatedScale(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutBack,
+                scale: selected ? 1.12 : 1,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(999),
+                  onTap: () => onChanged(hex),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: colorFromHex(hex),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: selected
+                            ? Theme.of(context).colorScheme.onSurface
+                            : Colors.white,
+                        width: selected ? 3 : 2,
+                      ),
+                      boxShadow: selected
+                          ? <BoxShadow>[
+                              BoxShadow(
+                                color: colorFromHex(
+                                  hex,
+                                ).withValues(alpha: 0.38),
+                                blurRadius: 14,
+                                spreadRadius: 1,
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: selected
+                        ? const Icon(
+                            Icons.check_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          )
+                        : null,
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
+        ],
       ],
     );
   }
@@ -3793,6 +3902,22 @@ Color colorFromHex(String hex) {
   return Color(int.parse('FF$clean', radix: 16));
 }
 
+Color activityTypeCalendarColor(TipoAtividade tipo) {
+  return switch (tipo) {
+    TipoAtividade.atividade => const Color(0xFF2563EB),
+    TipoAtividade.trabalho => const Color(0xFF7C3AED),
+    TipoAtividade.avaliacao => const Color(0xFFFF3B5C),
+  };
+}
+
+IconData activityTypeIcon(TipoAtividade tipo) {
+  return switch (tipo) {
+    TipoAtividade.atividade => Icons.event_note_outlined,
+    TipoAtividade.trabalho => Icons.assignment_outlined,
+    TipoAtividade.avaliacao => Icons.fact_check_outlined,
+  };
+}
+
 const List<String> _cardColorHexes = <String>[
   '#1B9AAA',
   '#5B7CFA',
@@ -3802,4 +3927,14 @@ const List<String> _cardColorHexes = <String>[
   '#7C3AED',
   '#FF7A00',
   '#111827',
+  '#2563EB',
+  '#14B8A6',
+  '#0EA5E9',
+  '#84CC16',
+  '#EF4444',
+  '#EC4899',
+  '#A855F7',
+  '#F97316',
+  '#64748B',
+  '#0F172A',
 ];
